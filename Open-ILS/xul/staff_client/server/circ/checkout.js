@@ -907,6 +907,7 @@ circ.checkout.prototype = {
                                 JSAN.use('util.date'); var today = util.date.formatted_date(new Date(),'%F');
                                 if (due_date) {
                                     if (today > due_date) {
+                                        if (msg.length) msg += ' / ';
                                         msg += (document.getElementById('circStrings').getFormattedString('staff.circ.checkout.item_due', [ util.date.formatted_date( my_circ.due_date(), '%{localized}' ) ]) + '\n');
                                     }
                                 }
@@ -944,6 +945,7 @@ circ.checkout.prototype = {
                                         } );
                                     } else {
 
+                                        if (msg.length) msg += ' / ';
                                         var cko_d = util.date.formatted_date( my_circ.create_time(), '%{localized_date}' );
                                         var cur_d = util.date.formatted_date( new Date(), '%{localized_date}');
                                         if (cko_d == cur_d) {
