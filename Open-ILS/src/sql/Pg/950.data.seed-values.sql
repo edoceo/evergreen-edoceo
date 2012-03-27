@@ -1529,7 +1529,11 @@ INSERT INTO permission.perm_list ( id, code, description ) VALUES
  ( 519, 'ADMIN_SMS_CARRIER', oils_i18n_gettext( 519,
     'Allows a user to add/create/delete SMS Carrier entries.', 'ppl', 'description' )),
  ( 520, 'COPY_DELETE_WARNING.override', oils_i18n_gettext( 520,
-    'Allow a user to override warnings about deleting copies in problematic situations.', 'ppl', 'description' ));
+    'Allow a user to override warnings about deleting copies in problematic situations.', 'ppl', 'description' )),
+ ( 521, 'IMPORT_ACQ_LINEITEM_BIB_RECORD_UPLOAD', oils_i18n_gettext( 521,
+    'Allows a user to create new bibs directly from an ACQ MARC file upload', 'ppl', 'description' )),
+ ( 522, 'IMPORT_AUTHORITY_MARC', oils_i18n_gettext( 522,
+    'Allows a user to create new authority records', 'ppl', 'description' ));
 
 
 SELECT SETVAL('permission.perm_list_id_seq'::TEXT, 1000);
@@ -1766,6 +1770,7 @@ INSERT INTO permission.grp_perm_map (grp, perm, depth, grantable)
 			'DELETE_TITLE_NOTE',
 			'IMPORT_ACQ_LINEITEM_BIB_RECORD',
 			'IMPORT_MARC',
+            'IMPORT_AUTHORITY_MARC',
 			'MERGE_AUTH_RECORDS',
 			'MERGE_BIB_RECORDS',
 			'UPDATE_AUTHORITY_IMPORT_QUEUE',
@@ -4407,6 +4412,33 @@ INSERT into config.org_unit_setting_type
         'coust', 'description'),
     'bool', null)
 
+,( 'ui.patron.edit.au.prefix.require', 'gui',
+    oils_i18n_gettext('ui.patron.edit.au.prefix.require',
+        'Require prefix field on patron registration',
+        'coust', 'label'),
+    oils_i18n_gettext('ui.patron.edit.au.prefix.require',
+        'The prefix field will be required on the patron registration screen.'
+        'coust', 'description'),
+    'bool', null)
+	
+,( 'ui.patron.edit.au.prefix.show', 'gui',
+    oils_i18n_gettext('ui.patron.edit.au.prefix.show',
+        'Show prefix field on patron registration',
+        'coust', 'label'),
+    oils_i18n_gettext('ui.patron.edit.au.prefix.show',
+        'The prefix field will be shown on the patron registration screen. Showing a field makes it appear with required fields even when not required. If the field is required this setting is ignored.'
+        'coust', 'description'),
+    'bool', null)
+
+,( 'ui.patron.edit.au.prefix.suggest', 'gui',
+    oils_i18n_gettext('ui.patron.edit.au.prefix.suggest',
+        'Suggest prefix field on patron registration',
+        'coust', 'label'),
+    oils_i18n_gettext('ui.patron.edit.au.prefix.suggest',
+        'The prefix field will be shown on the patron registration screen. Showing a field makes it appear with required fields even when not required. If the field is required this setting is ignored.'
+        'coust', 'description'),
+    'bool', null)
+
 ,( 'ui.patron.edit.au.second_given_name.show', 'gui',
     oils_i18n_gettext('ui.patron.edit.au.second_given_name.show',
         'Show second_given_name field on patron registration',
@@ -5497,6 +5529,7 @@ INSERT INTO config.marc21_physical_characteristic_value_map (value,ptype_subfiel
 INSERT INTO config.marc21_physical_characteristic_value_map (value,ptype_subfield,label) VALUES ('o',CURRVAL('config.marc21_physical_characteristic_subfield_map_id_seq'),'D-2');
 INSERT INTO config.marc21_physical_characteristic_value_map (value,ptype_subfield,label) VALUES ('p',CURRVAL('config.marc21_physical_characteristic_subfield_map_id_seq'),'8 mm.');
 INSERT INTO config.marc21_physical_characteristic_value_map (value,ptype_subfield,label) VALUES ('q',CURRVAL('config.marc21_physical_characteristic_subfield_map_id_seq'),'Hi-8 mm.');
+INSERT INTO config.marc21_physical_characteristic_value_map (value,ptype_subfield,label) VALUES ('s',CURRVAL('config.marc21_physical_characteristic_subfield_map_id_seq'),'Blu-ray');
 INSERT INTO config.marc21_physical_characteristic_value_map (value,ptype_subfield,label) VALUES ('u',CURRVAL('config.marc21_physical_characteristic_subfield_map_id_seq'),'Unknown');
 INSERT INTO config.marc21_physical_characteristic_value_map (value,ptype_subfield,label) VALUES ('v',CURRVAL('config.marc21_physical_characteristic_subfield_map_id_seq'),'DVD');
 INSERT INTO config.marc21_physical_characteristic_value_map (value,ptype_subfield,label) VALUES ('z',CURRVAL('config.marc21_physical_characteristic_subfield_map_id_seq'),'Other');
@@ -6522,6 +6555,8 @@ The item(s) you requested are available for pickup from the Library.
 
 $$);
 
+INSERT INTO action_trigger.event_params (event_def, param, value)
+    VALUES (5, 'check_email_notify', 1);
 
 INSERT INTO action_trigger.hook (
         key,
@@ -6584,6 +6619,8 @@ pickup, but these holds will soon expire.
 $$
 );
 
+INSERT INTO action_trigger.event_params (event_def, param, value)
+    VALUES (7, 'check_email_notify', 1);
 
 INSERT INTO action_trigger.environment (
         event_def,
@@ -6607,6 +6644,15 @@ INSERT INTO action_trigger.hook (
         TRUE
     );
 
+INSERT INTO action_trigger.validator (module,description) VALUES
+    ('HoldNotifyCheck',
+    oils_i18n_gettext(
+        'HoldNotifyCheck',
+        'Check Hold notification flag(s)',
+        'atval',
+        'description'
+    ));
+
 INSERT INTO action_trigger.event_definition (
         id,
         active,
@@ -6625,7 +6671,7 @@ INSERT INTO action_trigger.event_definition (
         1,
         'Hold waiting for pickup for long time',
         'hold_request.long_wait',
-        'NOOP_True',
+        'HoldNotifyCheck',
         'SendEmail',
         '6 MONTHS',
         'request_time',
@@ -6657,6 +6703,9 @@ INSERT INTO action_trigger.environment (event_def, path)
     (9, 'pickup_lib'),
     (9, 'usr'),
     (9, 'current_copy.call_number');
+
+INSERT INTO action_trigger.event_params (event_def, param, value)
+    VALUES (9, 'check_email_notify', 1);
 
 -- trigger data related to acq user requests
 
@@ -7366,15 +7415,6 @@ INSERT INTO config.metabib_field_index_norm_map (field,norm,params)
     SELECT  m.id,
             i.id,
             $$["-",""]$$
-      FROM  config.metabib_field m,
-            config.index_normalizer i
-      WHERE i.func IN ('replace')
-            AND m.id IN (19);
-
-INSERT INTO config.metabib_field_index_norm_map (field,norm,params)
-    SELECT  m.id,
-            i.id,
-            $$[" ",""]$$
       FROM  config.metabib_field m,
             config.index_normalizer i
       WHERE i.func IN ('replace')
@@ -8464,6 +8504,7 @@ INSERT INTO action_trigger.event_definition (
         cleanup_failure,
         group_field,
         granularity,
+        delay,
         template
     ) VALUES (
         31,
@@ -8477,22 +8518,42 @@ INSERT INTO action_trigger.event_definition (
         'DeleteTempBiblioBucket',
         'owner',
         NULL,
+        '00:00:00'
 $$
-[%- USE date -%]
 [%- SET user = target.0.owner -%]
 To: [%- params.recipient_email || user.email %]
 From: [%- params.sender_email || default_sender %]
 Subject: Bibliographic Records
 
-    [% FOR cbreb IN target %]
-    [% FOR cbrebi IN cbreb.items %]
-        Bib ID# [% cbrebi.target_biblio_record_entry.id %] ISBN: [% crebi.target_biblio_record_entry.simple_record.isbn %]
-        Title: [% cbrebi.target_biblio_record_entry.simple_record.title %]
-        Author: [% cbrebi.target_biblio_record_entry.simple_record.author %]
-        Publication Year: [% cbrebi.target_biblio_record_entry.simple_record.pubdate %]
+[% FOR cbreb IN target %]
+[% FOR item IN cbreb.items;
+    bre_id = item.target_biblio_record_entry;
 
-    [% END %]
-    [% END %]
+    bibxml = helpers.unapi_bre(bre_id, {flesh => '{mra}'});
+    FOR part IN bibxml.findnodes('//*[@tag="245"]/*[@code="a" or @code="b"]');
+        title = title _ part.textContent;
+    END;
+
+    author = bibxml.findnodes('//*[@tag="100"]/*[@code="a"]').textContent;
+    item_type = bibxml.findnodes('//*[local-name()="attributes"]/*[local-name()="field"][@name="item_type"]').getAttribute('coded-value');
+    publisher = bibxml.findnodes('//*[@tag="260"]/*[@code="b"]').textContent;
+    pubdate = bibxml.findnodes('//*[@tag="260"]/*[@code="c"]').textContent;
+    isbn = bibxml.findnodes('//*[@tag="020"]/*[@code="a"]').textContent;
+    issn = bibxml.findnodes('//*[@tag="022"]/*[@code="a"]').textContent;
+    upc = bibxml.findnodes('//*[@tag="024"]/*[@code="a"]').textContent;
+%]
+
+[% loop.count %]/[% loop.size %].  Bib ID# [% bre_id %] 
+[% IF isbn %]ISBN: [% isbn _ "\n" %][% END -%]
+[% IF issn %]ISSN: [% issn _ "\n" %][% END -%]
+[% IF upc  %]UPC:  [% upc _ "\n" %] [% END -%]
+Title: [% title %]
+Author: [% author %]
+Publication Info: [% publisher %] [% pubdate %]
+Item Type: [% item_type %]
+
+[% END %]
+[% END %]
 $$
     )
     ,(
@@ -8507,17 +8568,33 @@ $$
         'DeleteTempBiblioBucket',
         'owner',
         'print-on-demand',
+        NULL,
 $$
-[%- USE date -%]
 <div>
     <style> li { padding: 8px; margin 5px; }</style>
     <ol>
     [% FOR cbreb IN target %]
-    [% FOR cbrebi IN cbreb.items %]
-        <li>Bib ID# [% cbrebi.target_biblio_record_entry.id %] ISBN: [% crebi.target_biblio_record_entry.simple_record.isbn %]<br />
-            Title: [% cbrebi.target_biblio_record_entry.simple_record.title %]<br />
-            Author: [% cbrebi.target_biblio_record_entry.simple_record.author %]<br />
-            Publication Year: [% cbrebi.target_biblio_record_entry.simple_record.pubdate %]
+    [% FOR item IN cbreb.items;
+        bre_id = item.target_biblio_record_entry;
+
+        bibxml = helpers.unapi_bre(bre_id, {flesh => '{mra}'});
+        FOR part IN bibxml.findnodes('//*[@tag="245"]/*[@code="a" or @code="b"]');
+            title = title _ part.textContent;
+        END;
+
+        author = bibxml.findnodes('//*[@tag="100"]/*[@code="a"]').textContent;
+        item_type = bibxml.findnodes('//*[local-name()="attributes"]/*[local-name()="field"][@name="item_type"]').getAttribute('coded-value');
+        publisher = bibxml.findnodes('//*[@tag="260"]/*[@code="b"]').textContent;
+        pubdate = bibxml.findnodes('//*[@tag="260"]/*[@code="c"]').textContent;
+        isbn = bibxml.findnodes('//*[@tag="020"]/*[@code="a"]').textContent;
+        %]
+
+        <li>
+            Bib ID# [% bre_id %] ISBN: [% isbn %]<br />
+            Title: [% title %]<br />
+            Author: [% author %]<br />
+            Publication Info: [% publisher %] [% pubdate %]<br/>
+            Item Type: [% item_type %]
         </li>
     [% END %]
     [% END %]
@@ -8533,20 +8610,7 @@ INSERT INTO action_trigger.environment (
     ) VALUES -- for fleshing cbreb objects
          ( 31, 'owner' )
         ,( 31, 'items' )
-        ,( 31, 'items.target_biblio_record_entry' )
-        ,( 31, 'items.target_biblio_record_entry.simple_record' )
-        ,( 31, 'items.target_biblio_record_entry.call_numbers' )
-        ,( 31, 'items.target_biblio_record_entry.fixed_fields' )
-        ,( 31, 'items.target_biblio_record_entry.notes' )
-        ,( 31, 'items.target_biblio_record_entry.full_record_entries' )
-        ,( 32, 'owner' )
         ,( 32, 'items' )
-        ,( 32, 'items.target_biblio_record_entry' )
-        ,( 32, 'items.target_biblio_record_entry.simple_record' )
-        ,( 32, 'items.target_biblio_record_entry.call_numbers' )
-        ,( 32, 'items.target_biblio_record_entry.fixed_fields' )
-        ,( 32, 'items.target_biblio_record_entry.notes' )
-        ,( 32, 'items.target_biblio_record_entry.full_record_entries' )
 ;
 
 INSERT INTO acq.invoice_item_type (code,name) VALUES ('TAX',oils_i18n_gettext('TAX', 'Tax', 'aiit', 'name'));
@@ -9160,6 +9224,8 @@ INSERT INTO vandelay.import_error ( code, description ) VALUES (
     'import.item.invalid.copy_number', oils_i18n_gettext('import.item.invalid.copy_number', 'Invalid value for "copy_number"', 'vie', 'description') );
 INSERT INTO vandelay.import_error ( code, description ) VALUES ( 
     'import.item.invalid.circ_as_type', oils_i18n_gettext('import.item.invalid.circ_as_type', 'Invalid value for "circ_as_type"', 'vie', 'description') );
+INSERT INTO vandelay.import_error ( code, description ) VALUES ( 
+    'import.record.perm_failure', oils_i18n_gettext('import.record.perm_failure', 'Perm failure creating a record', 'vie', 'description') );
 
 -- Event def for email notice for hold cancelled due to lack of target -----
 
@@ -9191,6 +9257,9 @@ INSERT INTO action_trigger.environment (event_def, path) VALUES
     (38, 'usr'),
     (38, 'pickup_lib'),
     (38, 'bib_rec.bib_record.simple_record');
+
+INSERT INTO action_trigger.event_params (event_def, param, value)
+    VALUES (currval('action_trigger.event_definition_id_seq'), 'check_email_notify', 1);
 
 ----------------------------------------------------------------
 -- Seed data for queued record/item exports
@@ -11238,6 +11307,9 @@ INSERT INTO action_trigger.environment (
     'pickup_lib.billing_address'
 );
 
+INSERT INTO action_trigger.event_params (event_def, param, value)
+    VALUES (currval('action_trigger.event_definition_id_seq'), 'check_sms_notify', 1);
+
 INSERT INTO action_trigger.hook(
     key,
     core_type,
@@ -11355,6 +11427,26 @@ SELECT SETVAL('config.usr_activity_type_id_seq'::TEXT, 1000);
 INSERT INTO config.org_unit_setting_type 
     (name, label, description, grp, datatype) 
     VALUES (
+        'circ.fines.charge_when_closed',
+         oils_i18n_gettext(
+            'circ.fines.charge_when_closed',
+            'Charge fines on overdue circulations when closed',
+            'coust', 
+            'label'
+        ),
+        oils_i18n_gettext(
+            'circ.fines.charge_when_closed',
+            'Normally, fines are not charged when a library is closed.  When set to True, fines will be charged during scheduled closings and normal weekly closed days.',
+            'coust', 
+            'description'
+        ),
+        'circ',
+        'bool'
+    );
+
+INSERT INTO config.org_unit_setting_type 
+    (name, label, description, grp, datatype) 
+    VALUES (
         'circ.patron.usr_activity_retrieve.max',
          oils_i18n_gettext(
             'circ.patron.usr_activity_retrieve.max',
@@ -11370,5 +11462,50 @@ INSERT INTO config.org_unit_setting_type
         ),
         'gui',
         'integer'
+    );
+-- circ export csv export --
+
+INSERT INTO action_trigger.hook (key, core_type, description, passive)
+VALUES (
+    'circ.format.history.csv',
+    'circ',
+    oils_i18n_gettext(
+        'circ.format.history.csv',
+        'Produce CSV of circulation history',
+        'ath',
+        'description'
+    ),
+    FALSE
+);
+
+INSERT INTO action_trigger.event_definition (
+    active, owner, name, hook, reactor, validator, group_field, template) 
+VALUES (
+    TRUE, 1, 'Circ History CSV', 'circ.format.history.csv', 'ProcessTemplate', 'NOOP_True', 'usr',
+$$
+Title,Author,Call Number,Barcode,Format
+[%-
+FOR circ IN target;
+    bibxml = helpers.unapi_bre(circ.target_copy.call_number.record, {flesh => '{mra}'});
+    title = "";
+    FOR part IN bibxml.findnodes('//*[@tag="245"]/*[@code="a" or @code="b"]');
+        title = title _ part.textContent;
+    END;
+    author = bibxml.findnodes('//*[@tag="100"]/*[@code="a"]').textContent;
+    item_type = bibxml.findnodes('//*[local-name()="attributes"]/*[local-name()="field"][@name="item_type"]').getAttribute('coded-value') %]
+
+    [%- helpers.csv_datum(title) -%],
+    [%- helpers.csv_datum(author) -%],
+    [%- helpers.csv_datum(circ.target_copy.call_number.label) -%],
+    [%- helpers.csv_datum(circ.target_copy.barcode) -%],
+    [%- helpers.csv_datum(item_type) %]
+[%- END -%]
+$$
+);
+
+INSERT INTO action_trigger.environment (event_def, path)
+    VALUES (
+        currval('action_trigger.event_definition_id_seq'),
+        'target_copy.call_number'
     );
 

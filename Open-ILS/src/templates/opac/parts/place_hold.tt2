@@ -68,7 +68,7 @@
         <p>
             [% l('Pickup location:') %]
             [% PROCESS "opac/parts/org_selector.tt2";
-                PROCESS build_org_selector name='pickup_lib' value=ctx.default_pickup_lib id='pickup_lib' can_have_vols_only=1 %]
+                INCLUDE build_org_selector name='pickup_lib' value=ctx.default_pickup_lib id='pickup_lib' can_have_vols_only=1 %]
         </p>
         <p>
             [% l('Notify when hold is ready for pickup?') %]
@@ -93,11 +93,6 @@
                 </blockquote>
                 [% END %]
             </blockquote>
-        </p>
-        <p>
-            [% |l %]If you use the Traveling Library Center (TLC) and ABC Express
-            services, please select "Outreach" to have the item delivered
-            during your scheduled visit.[% END %]
         </p>
         <input type="submit" name="submit" value="[% l('Submit') %]" title="[% l('Submit') %]"
             alt="[% l('Submit') %]" class="opac-button" />

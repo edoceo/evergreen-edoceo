@@ -51,7 +51,23 @@ util.list.prototype = {
         if (typeof params.prebuilt != 'undefined') obj.prebuilt = params.prebuilt;
 
         if (typeof params.columns == 'undefined') throw('util.list.init: No columns');
-        obj.columns = [];
+        obj.columns = [
+            {
+                'id' : 'lineno',
+                'label' : document.getElementById('offlineStrings').getString('list.line_number'),
+                'flex' : '0',
+                'no_sort' : 'true',
+                'properties' : 'ordinal', // column properties for css styling
+                'hidden' : 'false',
+                'editable' : false,
+                'render' : function(my,scratch) {
+                    // special code will handle this based on the attribute we set
+                    // here.  All cells for this column need to be updated whenever
+                    // a list adds, removes, or sorts rows
+                    return '_';
+                }
+            }
+        ];
         for (var i = 0; i < params.columns.length; i++) {
             if (typeof params.columns[i] == 'object') {
                 obj.columns.push( params.columns[i] );
@@ -407,14 +423,14 @@ util.list.prototype = {
         }
         if (rparams && params.attributes) {
             for (var i in params.attributes) {
-                rparams.my_node.setAttribute(i,params.attributes[i]);
+                rparams.treeitem_node.setAttribute(i,params.attributes[i]);
             }
         }
         this.row_count.total++;
         if (this.row_count.fleshed == this.row_count.total) {
             setTimeout( function() { obj.exec_on_all_fleshed(); }, 0 );
         }
-        rparams.my_node.setAttribute('unique_row_counter',obj.unique_row_counter);
+        rparams.treeitem_node.setAttribute('unique_row_counter',obj.unique_row_counter);
         rparams.unique_row_counter = obj.unique_row_counter++;
         if (typeof params.on_append == 'function') {
             params.on_append(rparams);
@@ -431,7 +447,7 @@ util.list.prototype = {
         }
         if (rparams && params.attributes) {
             for (var i in params.attributes) {
-                rparams.my_node.setAttribute(i,params.attributes[i]);
+                rparams.treeitem_node.setAttribute(i,params.attributes[i]);
             }
         }
         this.row_count.fleshed--;
@@ -524,13 +540,13 @@ util.list.prototype = {
                         }
                     }
 
-                    params.row_node = treeitem;
+                    params.treeitem_node = treeitem;
                     params.on_retrieve = function(p) {
                         try {
                             p.row = params.row;
                             obj._map_row_to_treecell(p,treerow);
                             inc_fleshed();
-                            var idx = obj.node.contentView.getIndexOfItem( params.row_node );
+                            var idx = obj.node.contentView.getIndexOfItem( params.treeitem_node );
                             dump('idx = ' + idx + '\n');
                             // if current row is selected, send another select event to re-sync data that the client code fetches on selects
                             if ( obj.node.view.selection.isSelected( idx ) ) {
@@ -611,9 +627,9 @@ util.list.prototype = {
             } catch(E) {
             }
 
-        setTimeout( function() { obj.auto_retrieve(); }, 0 );
+        setTimeout( function() { obj.auto_retrieve(); obj.refresh_ordinals(); }, 0 );
 
-        params.my_node = treeitem;
+        params.treeitem_node = treeitem;
         return params;
     },
 
@@ -622,12 +638,12 @@ util.list.prototype = {
         var obj = this;
 
         if (typeof params.row == 'undefined') throw('util.list.refresh_row: Object must contain a row');
-        if (typeof params.my_node == 'undefined') throw('util.list.refresh_row: Object must contain a my_node');
-        if (params.my_node.nodeName != 'treeitem') throw('util.list.refresh_rwo: my_node must be a treeitem');
+        if (typeof params.treeitem_node == 'undefined') throw('util.list.refresh_row: Object must contain a treeitem_node');
+        if (params.treeitem_node.nodeName != 'treeitem') throw('util.list.refresh_rwo: treeitem_node must be a treeitem');
 
         var s = ('util.list.refresh_row: params = ' + (params) + '\n');
 
-        var treeitem = params.my_node;
+        var treeitem = params.treeitem_node;
         treeitem.setAttribute('retrieve_id',params.retrieve_id);
         if (typeof params.to_bottom != 'undefined') {
             if (typeof params.no_auto_select == 'undefined') {
@@ -684,13 +700,13 @@ util.list.prototype = {
                         }
                     }
 
-                    params.row_node = treeitem;
+                    params.treeitem_node = treeitem;
                     params.on_retrieve = function(p) {
                         try {
                             p.row = params.row;
                             obj._map_row_to_treecell(p,treerow);
                             inc_fleshed();
-                            var idx = obj.node.contentView.getIndexOfItem( params.row_node );
+                            var idx = obj.node.contentView.getIndexOfItem( params.treeitem_node );
                             dump('idx = ' + idx + '\n');
                             // if current row is selected, send another select event to re-sync data that the client code fetches on selects
                             if ( obj.node.view.selection.isSelected( idx ) ) {
@@ -773,13 +789,44 @@ util.list.prototype = {
             } catch(E) {
             }
 
-        setTimeout( function() { obj.auto_retrieve(); }, 0 );
+        setTimeout( function() { obj.auto_retrieve(); obj.refresh_ordinals(); }, 0 );
 
         JSAN.use('util.widgets'); util.widgets.dispatch('select',obj.node);
 
         this.error.sdump('D_LIST',s);
 
         return params;
+    },
+
+    'refresh_ordinals' : function() {
+        var obj = this;
+        try {
+            setTimeout( // Otherwise we can miss a row just added
+                function() {
+                    var nl = document.getElementsByAttribute('label','_');
+                    for (var i = 0; i < nl.length; i++) {
+                        nl[i].setAttribute(
+                            'ord_col',
+                            'true'
+                        );
+                        nl[i].setAttribute( // treecell properties for css styling
+                            'properties',
+                            'ordinal'
+                        );
+                    }
+                    nl = document.getElementsByAttribute('ord_col','true');
+                    for (var i = 0; i < nl.length; i++) {
+                        nl[i].setAttribute(
+                            'label',
+                            // we could just use 'i' here if we trust the order of elements
+                            1 + obj.node.contentView.getIndexOfItem(nl[i].parentNode.parentNode) // treeitem
+                        );
+                    }
+                }, 1000
+            );
+        } catch(E) {
+            alert('Error in list.js, refresh_ordinals(): ' + E);
+        }
     },
 
     'put_retrieving_label' : function(treerow) {
@@ -967,7 +1014,7 @@ util.list.prototype = {
                     //FIXME//Make async and fire when row is visible in list
                     var row;
 
-                    params.row_node = listitem;
+                    params.treeitem_node = listitem;
                     params.on_retrieve = function(row) {
                         params.row = row;
                         obj._map_row_to_listcell(params,listitem);
@@ -995,7 +1042,7 @@ util.list.prototype = {
         }
 
         this.error.sdump('D_LIST',s);
-        params.my_node = listitem;
+        params.treeitem_node = listitem;
         return params;
 
     },
@@ -1512,7 +1559,7 @@ util.list.prototype = {
     '_sort_tree' : function(col,sortDir) {
         var obj = this;
         try {
-            if (obj.node.getAttribute('no_sort')) {
+            if (obj.node.getAttribute('no_sort') || col.getAttribute('no_sort')) {
                 return;
             }
             var col_pos;
@@ -1592,6 +1639,7 @@ util.list.prototype = {
                     } catch(E) {
                         obj.error.standard_unexpected_error_alert('sorting',E); 
                     }
+                    obj.refresh_ordinals();
                 }
             );
         } catch(E) {

@@ -99,7 +99,8 @@ sub load {
         $path =~ m:opac/(advanced|numeric|expert):;
 
     return $self->load_rresults if $path =~ m|opac/results|;
-    return $self->load_record if $path =~ m|opac/record|;
+    return $self->load_print_record if $path =~ m|opac/record/print|;
+    return $self->load_record if $path =~ m|opac/record/\d|;
     return $self->load_cnbrowse if $path =~ m|opac/cnbrowse|;
 
     return $self->load_mylist_add if $path =~ m|opac/mylist/add|;
@@ -139,11 +140,14 @@ sub load {
     # ----------------------------------------------------------------
     return $self->redirect_auth unless $self->editor->requestor;
 
+    return $self->load_email_record if $path =~ m|opac/record/email|;
+
     return $self->load_place_hold if $path =~ m|opac/place_hold|;
     return $self->load_myopac_holds if $path =~ m|opac/myopac/holds|;
     return $self->load_myopac_circs if $path =~ m|opac/myopac/circs|;
     return $self->load_myopac_payment_form if $path =~ m|opac/myopac/main_payment_form|;
     return $self->load_myopac_payments if $path =~ m|opac/myopac/main_payments|;
+    return $self->load_myopac_pay_init if $path =~ m|opac/myopac/main_pay_init|;
     return $self->load_myopac_pay if $path =~ m|opac/myopac/main_pay|;
     return $self->load_myopac_main if $path =~ m|opac/myopac/main|;
     return $self->load_myopac_receipt_email if $path =~ m|opac/myopac/receipt_email|;
@@ -154,6 +158,7 @@ sub load {
     return $self->load_myopac_bookbags if $path =~ m|opac/myopac/lists|;
     return $self->load_myopac_bookbag_print if $path =~ m|opac/myopac/list/print|;
     return $self->load_myopac_bookbag_update if $path =~ m|opac/myopac/list/update|;
+    return $self->load_myopac_circ_history_export if $path =~ m|opac/myopac/circ_history/export|;
     return $self->load_myopac_circ_history if $path =~ m|opac/myopac/circ_history|;
     return $self->load_myopac_hold_history if $path =~ m|opac/myopac/hold_history|;
     return $self->load_myopac_prefs_notify if $path =~ m|opac/myopac/prefs_notify|;

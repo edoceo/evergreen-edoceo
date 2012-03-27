@@ -351,6 +351,7 @@ sub update_patron {
 	$evt = check_group_perm($session, $user_obj, $patron);
 	return $evt if $evt;
 
+	$apputils->set_audit_info($session, $user_session, $user_obj->id, $user_obj->wsid);
 
 	# $new_patron is the patron in progress.  $patron is the original patron
 	# passed in with the method.  new_patron will change as the components
@@ -1037,6 +1038,7 @@ sub set_user_work_ous {
 	return $evt if $evt;
 
 	my $session = $apputils->start_db_session();
+	$apputils->set_audit_info($session, $ses, $requestor->id, $requestor->wsid);
 
 	for my $map (@$maps) {
 
@@ -1077,6 +1079,7 @@ sub set_user_perms {
 
 	my( $user_obj, $evt ) = $U->checkses($ses);
 	return $evt if $evt;
+	$apputils->set_audit_info($session, $ses, $user_obj->id, $user_obj->wsid);
 
 	my $perms = $session->request('open-ils.storage.permission.user_perms.atomic', $user_obj->id)->gather(1);
 
@@ -2664,7 +2667,7 @@ sub usrname_exists {
 	my( $self, $conn, $auth, $usrname ) = @_;
 	my $e = new_editor(authtoken=>$auth);
 	return $e->event unless $e->checkauth;
-	my $a = $e->search_actor_user({usrname => $usrname, deleted=>'f'}, {idlist=>1});
+	my $a = $e->search_actor_user({usrname => $usrname}, {idlist=>1});
 	return $$a[0] if $a and @$a;
 	return undef;
 }
@@ -3710,11 +3713,18 @@ sub user_payments {
                 }   
             }
         },
-        order_by => [{ # by default, order newest payments first
-            class => 'mp', 
-            field => 'payment_ts',
-            direction => 'desc'
-        }]
+        order_by => [
+            { # by default, order newest payments first
+                class => 'mp', 
+                field => 'payment_ts',
+                direction => 'desc'
+            }, {
+                # secondary sort in ID as a tie-breaker, since payments created
+                # within the same transaction will have identical payment_ts's
+                class => 'mp',
+                field => 'id'
+            }
+        ]
     };
 
     for (qw/order_by limit offset/) {

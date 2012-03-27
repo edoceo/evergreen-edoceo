@@ -66,7 +66,7 @@ function searchBarInit() {
 	G.ui.searchbar.text.value = (getTerm() != null) ? getTerm() : "";
 	if (!isFrontPage) G.ui.searchbar.facets.value = (getFacet() != null) ? getFacet() : "";
 	setSelector(_ts,	getStype());
-	setSelector(_fs,	getForm());
+	setSelector(_fs,	getItemType());
 
 	depthSelInit();
 
@@ -89,7 +89,9 @@ function searchBarSubmit(isFilterSort) {
 	var text = G.ui.searchbar.text.value;
 	var facet_text = isFrontPage ? '' : G.ui.searchbar.facets.value;
 
-	clearSearchParams();
+    if (!isFilterSort) {	
+        clearSearchParams();
+    }
 
 	if(!text || text == "") return;
 

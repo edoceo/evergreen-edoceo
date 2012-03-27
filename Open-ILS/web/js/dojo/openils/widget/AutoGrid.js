@@ -16,6 +16,7 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
 
             /* if true, pop up an edit dialog when user hits Enter on a give row */
             editPaneOnSubmit : null,
+            onPostSubmit : null, // called after any CRUD actions are complete
             createPaneOnSubmit : null,
             editOnEnter : false, 
             defaultCellWidth : null,
@@ -25,7 +26,9 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
             suppressEditFields : null,
             suppressFilterFields : null,
             hideSelector : false,
+            hideLineNumber : false,
             selectorWidth : '1.5',
+            lineNumberWidth : '1.5',
             showColumnPicker : false,
             columnPickerPrefix : null,
             displayLimit : 15,
@@ -37,6 +40,14 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
 
             /* by default, don't show auto-generated (sequence) fields */
             showSequenceFields : false, 
+
+            // style the cells in the line number column
+            onStyleRow : function(row) {
+                if (!this.hideLineNumber) {
+                    var cellIdx = this.hideSelector ? 0 : 1;
+                    dojo.addClass(this.views.views[0].getCellNode(row.index, cellIdx), 'autoGridLineNumber');
+                }
+            },
 
             startup : function() {
                 this.selectionMode = 'single';
@@ -156,6 +167,10 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
             canSort : function(rowIdx) {
                 if(rowIdx == 1 && !this.hideSelector)
                     return false;
+                if(this.hideSelector && rowIdx == 1 && !this.hideLineNumber)
+                    return false;
+                if(!this.hideSelector && rowIdx == 2 && !this.hideLineNumber)
+                    return false;
                 return true;
             },
 
@@ -189,6 +204,16 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
                     });
                 }
 
+                if(!this.hideLineNumber) {
+                    // insert the line number column
+                    pushEntry({
+                        field : '+lineno',
+                        get : function(rowIdx, item) { if(item) return 1 + rowIdx; },
+                        width : this.lineNumberWidth,
+                        name : '#',
+                        nonSelectable : false
+                    });
+                }
 
                 if(!this.fieldOrder) {
                     /* no order defined, start with any explicit grid fields */
@@ -319,7 +344,16 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
                 dojo.forEach(items,
                     function(item) {
                         var fmObject = new fieldmapper[self.fmClass]().fromStoreItem(item);
-                        new openils.PermaCrud()['eliminate'](fmObject, {oncomplete : function(r) { self.store.deleteItem(item) }});
+                        new openils.PermaCrud()['eliminate'](
+                            fmObject, {
+                                oncomplete : function(r) {
+                                    self.store.deleteItem(item);
+                                    if (--total < 1 && self.onPostSubmit) {
+                                        self.onPostSubmit();
+                                    }
+                                }
+                            }
+                        );
                     }
                 );
             },
@@ -372,7 +406,6 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
                 var grid = this;
                 var fmObject = new fieldmapper[this.fmClass]().fromStoreItem(storeItem);
                 var idents = grid.store.getIdentityAttributes();
-                var self = this;
 
                 var pane = new openils.widget.EditPane({
                     fmObject:fmObject,
@@ -391,8 +424,8 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
                                 continue; // don't try to edit an identifier field
                             grid.store.setValue(storeItem, field, fmObject[field]());
                         }
-                        if(self.onPostUpdate)
-                            self.onPostUpdate(storeItem, rowIndex);
+                        if(grid.onPostUpdate)
+                            grid.onPostUpdate(storeItem, rowIndex);
                         setTimeout(
                             function(){
                                 try { 
@@ -402,6 +435,9 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
                         );
                         if(onPostSubmit) 
                             onPostSubmit();
+                        if (grid.onPostSubmit)
+                            grid.onPostSubmit();
+
                     },
                     onCancel : function() {
                         setTimeout(function(){
@@ -441,6 +477,8 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
                         },200);
                         if(onPostSubmit)
                             onPostSubmit(fmObject);
+                        if (grid.onPostSubmit)
+                            grid.onPostSubmit();
                     },
                     onCancel : function() {
                         if(onCancel) onCancel();
@@ -647,9 +685,12 @@ if(!dojo._hasResource['openils.widget.AutoGrid']) {
 
     openils.widget.AutoGrid.orgUnitGetter = function(rowIndex, item) {
         if (!item) return "";
-        return fieldmapper.aou.findOrgUnit(
-            this.grid.store.getValue(item, this.field)
-        ).shortname();
+
+        var aou_id = this.grid.store.getValue(item, this.field);
+        if (aou_id)
+            return fieldmapper.aou.findOrgUnit(aou_id).shortname();
+        else
+            return "";
     };
 }
 
