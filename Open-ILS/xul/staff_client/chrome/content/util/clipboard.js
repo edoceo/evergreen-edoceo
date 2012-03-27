@@ -4,7 +4,7 @@ if (typeof util == 'undefined') var util = {};
 util.clipboard = {};
 
 util.clipboard.EXPORT_OK    = [ 
-    'cut', 'copy', 'paste'
+    'cut', 'copy', 'paste', 'put'
 ];
 util.clipboard.EXPORT_TAGS    = { ':all' : util.clipboard.EXPORT_OK };
 
@@ -66,6 +66,28 @@ util.clipboard.paste = function() {
         n.value = v.substring(0, start) + clip + v.substring(end, v.length);
         n.setSelectionRange(start + clip.length,start + clip.length);
         dump('Pasted ' + clip + '\n');
+    } catch(E) {
+        alert(E);
+    }
+}
+
+util.clipboard.put = function(clip) {
+
+    if (typeof clip != 'string') {
+        return false;
+    }
+
+    try {
+        netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
+
+        const gClipboardHelper = Components.classes["@mozilla.org/widget/clipboardhelper;1"]
+            .getService(Components.interfaces.nsIClipboardHelper);
+
+        gClipboardHelper.copyString(clip);
+
+        var s = $('offlineStrings') || $('commonStrings');
+        alert(s.getFormattedString('openils.global_util.clipboard', [clip]));
+
     } catch(E) {
         alert(E);
     }
