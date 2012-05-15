@@ -251,11 +251,15 @@
     <command id="cmd_server_admin_config_usr_activity_type"
              perm="ADMIN_USER_ACTIVITY_TYPE VIEW_USER_ACTIVITY_TYPE"
              />
+    <command id="cmd_server_admin_actor_org_unit_custom_tree"
+             perm="ADMIN_ORG_UNIT_CUSTOM_TREE VIEW_ORG_UNIT_CUSTOM_TREE"
+             />
 
     <command id="cmd_hotkeys_toggle" />
     <command id="cmd_hotkeys_set" />
     <command id="cmd_hotkeys_setworkstation" />
     <command id="cmd_hotkeys_clearworkstation" />
+    <command id="cmd_toolbar_configure" />
     <command id="cmd_toolbar_set" />
     <command id="cmd_toolbar_setworkstation" />
     <command id="cmd_toolbar_clearworkstation" />
@@ -457,9 +461,6 @@
                     <menupopup id="main.menu.admin.client.toolbars.popup">
                         <menu id="main.menu.admin.client.toolbars.current" label="&staff.main.menu.admin.client.toolbars.current;">
                             <menupopup id="main.menu.admin.client.toolbars.current.popup">
-                                <menuitem name="current_toolbar" type="radio" label="&staff.main.button_bar.none;" value="none" command="cmd_toolbar_set" checked="true"/>
-                                <menuitem name="current_toolbar" type="radio" label="&staff.main.button_bar.circ;" value="circ" command="cmd_toolbar_set"/>
-                                <menuitem name="current_toolbar" type="radio" label="&staff.main.button_bar.cat;" value="cat" command="cmd_toolbar_set"/>
                             </menupopup>
                         </menu>
                         <menu id="main.menu.admin.client.toolbars.mode" label="&staff.main.menu.admin.client.toolbars.mode;">
@@ -481,6 +482,8 @@
                                 <menuitem name="toolbar_size" type="radio" label="&staff.main.menu.admin.client.toolbars.size.small;" value="small" command="cmd_toolbar_size_set"/>
                             </menupopup>
                         </menu>
+                        <menuseparator />
+                        <menuitem label="&staff.main.menu.admin.client.toolbars.config.label;" accesskey="&staff.main.menu.admin.client.toolbars.config.accesskey;" command="cmd_toolbar_configure"/>
                         <menuseparator />
                         <menuitem label="&staff.main.menu.admin.client.toolbars.setworkstation.label;" accesskey="&staff.main.menu.admin.client.toolbars.setworkstation.accesskey;" command="cmd_toolbar_setworkstation"/>
                         <menuitem label="&staff.main.menu.admin.client.toolbars.clearworkstation.label;" accesskey="&staff.main.menu.admin.client.toolbars.clearworkstation.accesskey;" command="cmd_toolbar_clearworkstation"/>
@@ -550,6 +553,7 @@
                 <menuitem label="&staff.main.menu.admin.server_admin.conify.config_actor_sip_fields;" command="cmd_server_admin_config_actor_sip_fields"/>
                 <menuitem label="&staff.main.menu.admin.server_admin.conify.config_asset_sip_fields;" command="cmd_server_admin_config_asset_sip_fields"/>
                 <menuitem label="&staff.main.menu.admin.server_admin.conify.config_usr_activity_type;" command="cmd_server_admin_config_usr_activity_type"/>
+                <menuitem label="&staff.main.menu.admin.server_admin.conify.actor.org_unit_custom_tree;" command="cmd_server_admin_actor_org_unit_custom_tree"/>
                 <menu id="main.menu.admin.server.acq" label="&staff.main.menu.admin.server_admin.acq.label;" accesskey="&staff.main.menu.admin.server_admin.acq.accesskey;">
                     <menupopup id="main.menu.admin.server.acq.popup">
                         <menuitem label="&staff.main.menu.admin.server_admin.acq.fund.label;" accesskey="&staff.main.menu.admin.server_admin.acq.fund.accesskey;" command="cmd_server_admin_acq_fund" />

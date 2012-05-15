@@ -1533,7 +1533,31 @@ INSERT INTO permission.perm_list ( id, code, description ) VALUES
  ( 521, 'IMPORT_ACQ_LINEITEM_BIB_RECORD_UPLOAD', oils_i18n_gettext( 521,
     'Allows a user to create new bibs directly from an ACQ MARC file upload', 'ppl', 'description' )),
  ( 522, 'IMPORT_AUTHORITY_MARC', oils_i18n_gettext( 522,
-    'Allows a user to create new authority records', 'ppl', 'description' ));
+    'Allows a user to create new authority records', 'ppl', 'description' )),
+ ( 523, 'ADMIN_TOOLBAR', oils_i18n_gettext( 523,
+    'Allows a user to create, edit, and delete custom toolbars', 'ppl', 'description' )),
+ ( 524, 'PLACE_UNFILLABLE_HOLD', oils_i18n_gettext( 524,
+    'Allows a user to place a hold that cannot currently be filled.', 'ppl', 'description' )),
+ ( 525, 'CREATE_PATRON_STAT_CAT_ENTRY_DEFAULT', oils_i18n_gettext( 525, 
+    'User may set a default entry in a patron statistical category', 'ppl', 'description' )),
+ ( 526, 'UPDATE_PATRON_STAT_CAT_ENTRY_DEFAULT', oils_i18n_gettext( 526, 
+    'User may reset a default entry in a patron statistical category', 'ppl', 'description' )),
+ ( 527, 'DELETE_PATRON_STAT_CAT_ENTRY_DEFAULT', oils_i18n_gettext( 527, 
+    'User may unset a default entry in a patron statistical category', 'ppl', 'description' )),
+ ( 528, 'ADMIN_ORG_UNIT_CUSTOM_TREE', oils_i18n_gettext( 528, 
+    'User may update custom org unit trees', 'ppl', 'description' )),
+ ( 529, 'ADMIN_IMPORT_MATCH_SET', oils_i18n_gettext( 529,
+    'Allows a user to create/retrieve/update/delete vandelay match sets', 'ppl', 'description' )),
+ ( 530, 'VIEW_IMPORT_MATCH_SET', oils_i18n_gettext( 530,
+    'Allows a user to view vandelay match sets', 'ppl', 'description' )),
+ ( 531, 'ADMIN_ADDRESS_ALERT', oils_i18n_gettext( 531,
+    'Allows a user to create/retrieve/update/delete address alerts', 'ppl', 'description' )), 
+ ( 532, 'VIEW_ADDRESS_ALERT', oils_i18n_gettext( 532,
+    'Allows a user to view address alerts', 'ppl', 'description' )), 
+ ( 533, 'ADMIN_COPY_LOCATION_GROUP', oils_i18n_gettext( 533,
+    'Allows a user to create/retrieve/update/delete copy location groups', 'ppl', 'description' )), 
+ ( 534, 'ADMIN_USER_ACTIVITY_TYPE', oils_i18n_gettext( 534,
+    'Allows a user to create/retrieve/update/delete user activity types', 'ppl', 'description' ));
 
 
 SELECT SETVAL('permission.perm_list_id_seq'::TEXT, 1000);
@@ -1743,6 +1767,7 @@ INSERT INTO permission.grp_perm_map (grp, perm, depth, grantable)
 			'RENEW_HOLD_OVERRIDE',
 			'UPDATE_COPY',
 			'UPDATE_VOLUME',
+			'ADMIN_TOOLBAR',
 			'VOLUME_HOLDS');
 
 
@@ -2054,12 +2079,14 @@ INSERT INTO permission.grp_perm_map (grp, perm, depth, grantable)
 			'CREATE_NON_CAT_TYPE',
 			'CREATE_PATRON_STAT_CAT',
 			'CREATE_PATRON_STAT_CAT_ENTRY',
+			'CREATE_PATRON_STAT_CAT_ENTRY_DEFAULT',
 			'CREATE_PATRON_STAT_CAT_ENTRY_MAP',
 			'CREATE_USER_GROUP_LINK',
 			'DELETE_BILLING_TYPE',
 			'DELETE_NON_CAT_TYPE',
 			'DELETE_PATRON_STAT_CAT',
 			'DELETE_PATRON_STAT_CAT_ENTRY',
+			'DELETE_PATRON_STAT_CAT_ENTRY_DEFAULT',
 			'DELETE_PATRON_STAT_CAT_ENTRY_MAP',
 			'DELETE_TRANSIT',
 			'group_application.user.staff',
@@ -2433,6 +2460,9 @@ INSERT INTO config.usr_setting_type (name,opac_visible,label,description,datatyp
 INSERT INTO config.usr_setting_type (name,opac_visible,label,description,datatype)
     VALUES ('circ.holds_behind_desk', FALSE, 'Hold is behind Circ Desk', 'Hold is behind Circ Desk', 'bool');
 
+INSERT INTO config.usr_setting_type (name,opac_visible,label,description,datatype)
+    VALUES ('opac.default_pickup_location', TRUE, 'Default Hold Pickup Location', 'Default location for holds pickup', 'integer');
+
 -- Add groups for org_unitu settings
 INSERT INTO config.settings_group (name, label) VALUES
 ('sys', oils_i18n_gettext('config.settings_group.system', 'System', 'coust', 'label')),
@@ -2446,7 +2476,7 @@ INSERT INTO config.settings_group (name, label) VALUES
 ('opac', oils_i18n_gettext('config.settings_group.opac', 'OPAC', 'coust', 'label')),
 ('prog', oils_i18n_gettext('config.settings_group.program', 'Program', 'coust', 'label')),
 ('glob', oils_i18n_gettext('config.settings_group.global', 'Global', 'coust', 'label')),
-('finance', oils_i18n_gettext('config.settings_group.finances', 'Finanaces', 'coust', 'label')),
+('finance', oils_i18n_gettext('config.settings_group.finances', 'Finances', 'coust', 'label')),
 ('credit', oils_i18n_gettext('config.settings_group.ccp', 'Credit Card Processing', 'coust', 'label')),
 ('serial', oils_i18n_gettext('config.settings_group.serial', 'Serials', 'coust', 'label')),
 ('recall', oils_i18n_gettext('config.settings_group.recall', 'Recalls', 'coust', 'label')),
@@ -4417,7 +4447,7 @@ INSERT into config.org_unit_setting_type
         'Require prefix field on patron registration',
         'coust', 'label'),
     oils_i18n_gettext('ui.patron.edit.au.prefix.require',
-        'The prefix field will be required on the patron registration screen.'
+        'The prefix field will be required on the patron registration screen.',
         'coust', 'description'),
     'bool', null)
 	
@@ -4426,7 +4456,7 @@ INSERT into config.org_unit_setting_type
         'Show prefix field on patron registration',
         'coust', 'label'),
     oils_i18n_gettext('ui.patron.edit.au.prefix.show',
-        'The prefix field will be shown on the patron registration screen. Showing a field makes it appear with required fields even when not required. If the field is required this setting is ignored.'
+        'The prefix field will be shown on the patron registration screen. Showing a field makes it appear with required fields even when not required. If the field is required this setting is ignored.',
         'coust', 'description'),
     'bool', null)
 
@@ -4435,7 +4465,7 @@ INSERT into config.org_unit_setting_type
         'Suggest prefix field on patron registration',
         'coust', 'label'),
     oils_i18n_gettext('ui.patron.edit.au.prefix.suggest',
-        'The prefix field will be shown on the patron registration screen. Showing a field makes it appear with required fields even when not required. If the field is required this setting is ignored.'
+        'The prefix field will be shown on the patron registration screen. Showing a field makes it appear with required fields even when not required. If the field is required this setting is ignored.',
         'coust', 'description'),
     'bool', null)
 
@@ -4657,6 +4687,21 @@ INSERT into config.org_unit_setting_type
         'description'
     ),
     'bool', null)
+,( 'serial.default_display_grouping', 'serial',
+    oils_i18n_gettext(
+        'serial.default_display_grouping',
+        'Default display grouping for serials distributions presented in the OPAC.',
+        'coust',
+        'label'
+    ),
+    oils_i18n_gettext(
+        'serial.default_display_grouping',
+        'Default display grouping for serials distributions presented in the OPAC. This can be "enum" or "chron".',
+        'coust',
+        'description'
+    ),
+    'string', null)
+
 ;
 
 UPDATE config.org_unit_setting_type
@@ -8518,7 +8563,7 @@ INSERT INTO action_trigger.event_definition (
         'DeleteTempBiblioBucket',
         'owner',
         NULL,
-        '00:00:00'
+        '00:00:00',
 $$
 [%- SET user = target.0.owner -%]
 To: [%- params.recipient_email || user.email %]
@@ -8568,7 +8613,7 @@ $$
         'DeleteTempBiblioBucket',
         'owner',
         'print-on-demand',
-        NULL,
+        '00:00:00',
 $$
 <div>
     <style> li { padding: 8px; margin 5px; }</style>
@@ -9259,7 +9304,7 @@ INSERT INTO action_trigger.environment (event_def, path) VALUES
     (38, 'bib_rec.bib_record.simple_record');
 
 INSERT INTO action_trigger.event_params (event_def, param, value)
-    VALUES (currval('action_trigger.event_definition_id_seq'), 'check_email_notify', 1);
+    VALUES (38, 'check_email_notify', 1);
 
 ----------------------------------------------------------------
 -- Seed data for queued record/item exports
@@ -10110,7 +10155,6 @@ INSERT INTO config.usr_setting_type (name,grp,opac_visible,label,description,dat
     ),
     'string'
 );
-
 SELECT setval( 'config.sms_carrier_id_seq', 1000 );
 INSERT INTO config.sms_carrier VALUES
 
@@ -11508,4 +11552,42 @@ INSERT INTO action_trigger.environment (event_def, path)
         currval('action_trigger.event_definition_id_seq'),
         'target_copy.call_number'
     );
+
+INSERT INTO actor.toolbar(org,label,layout) VALUES
+    ( 1, 'circ', '["circ_checkout","circ_checkin","toolbarseparator.1","search_opac","copy_status","toolbarseparator.2","patron_search","patron_register","toolbarspacer.3","hotkeys_toggle"]' ),
+    ( 1, 'cat', '["circ_checkin","toolbarseparator.1","search_opac","copy_status","toolbarseparator.2","create_marc","authority_manage","retrieve_last_record","toolbarspacer.3","hotkeys_toggle"]' );
+
+INSERT INTO config.global_flag (name, enabled, label) 
+    VALUES (
+        'opac.org_unit.non_inherited_visibility',
+        FALSE,
+        oils_i18n_gettext(
+            'opac.org_unit.non_inherited_visibility',
+            'Org Units Do Not Inherit Visibility',
+            'cgf',
+            'label'
+        )
+    );
+
+INSERT INTO config.org_unit_setting_type ( name, label, description, datatype, grp )
+    VALUES (
+        'ui.hide_copy_editor_fields',
+        oils_i18n_gettext(
+            'ui.hide_copy_editor_fields',
+            'GUI: Hide these fields within the Item Attribute Editor',
+            'coust',
+            'label'
+        ),
+        oils_i18n_gettext(
+            'ui.hide_copy_editor_fields',
+            'This setting may be best maintained with the dedicated configuration'
+            || ' interface within the Item Attribute Editor.  However, here it'
+            || ' shows up as comma separated list of field identifiers to hide.',
+            'coust',
+            'description'
+        ),
+        'array',
+        'gui'
+    );
+
 

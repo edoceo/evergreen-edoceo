@@ -70,12 +70,18 @@ sub init_ro_object_cache {
         # search for objects of class $hint where field=value
         $cache{search}{$hint} = {};
         $ro_object_subs->{$search_key} = sub {
-            my ($field, $val) = @_;
+            my ($field, $val, $filterfield, $filterval) = @_;
             my $method = "search_$eclass";
+            my $cacheval = $val;
+            my $search_obj = {$field => $val};
+            if($filterfield) {
+                $search_obj->{$filterfield} = $filterval;
+                $cacheval .= ':' . $filterfield . ':' . $filterval;
+            }
             $cache{search}{$hint}{$field} = {} unless $cache{search}{$hint}{$field};
-            $cache{search}{$hint}{$field}{$val} = $e->$method({$field => $val}) 
-                unless $cache{search}{$hint}{$field}{$val};
-            return $cache{search}{$hint}{$field}{$val};
+            $cache{search}{$hint}{$field}{$cacheval} = $e->$method($search_obj) 
+                unless $cache{search}{$hint}{$field}{$cacheval};
+            return $cache{search}{$hint}{$field}{$cacheval};
         };
     }
 
@@ -122,6 +128,47 @@ sub init_ro_object_cache {
         return [ values %{$cache{map}{aou}} ];
     };
 
+    $ro_object_subs->{aouct_tree} = sub {
+
+        # fetch the org unit tree
+        unless(exists $cache{aouct_tree}) {
+            $cache{aouct_tree} = undef;
+
+            my $tree_id = $e->search_actor_org_unit_custom_tree(
+                {purpose => 'opac', active => 't'},
+                {idlist => 1}
+            )->[0];
+
+            if ($tree_id) {
+                my $node_tree = $e->search_actor_org_unit_custom_tree_node([
+                {parent_node => undef, tree => $tree_id},
+                {   flesh        => -1,
+                    flesh_fields => {aouctn => ['children', 'org_unit']},
+                    order_by     => {aouctn => 'sibling_order'}
+                }
+                ])->[0];
+
+                # tree-ify the org units.  note that since the orgs are fleshed
+                # upon retrieval, this org tree will not clobber ctx->{aou_tree}.
+                my @nodes = ($node_tree);
+                while (my $node = shift(@nodes)) {
+                    my $aou = $node->org_unit;
+                    $aou->children([]);
+                    for my $cnode (@{$node->children}) {
+                        my $child_org = $cnode->org_unit;
+                        $child_org->parent_ou($aou->id);
+                        $child_org->ou_type( $ro_object_subs->{get_aout}->($child_org->ou_type) );
+                        push(@{$aou->children}, $child_org);
+                        push(@nodes, $cnode);
+                    }
+                }
+
+                $cache{aouct_tree} = $node_tree->org_unit;
+            }
+        }
+
+        return $cache{aouct_tree};
+    };
 
     # turns an ISO date into something TT can understand
     $ro_object_subs->{parse_datetime} = sub {
@@ -182,14 +229,23 @@ sub get_records_and_facets {
     $unapi_args->{flesh_depth} ||= 5;
 
     my @data;
+    my $outer_self = $self;
+    $self->timelog("get_records_and_facets(): about to call multisession");
     my $ses = OpenSRF::MultiSession->new(
         app => 'open-ils.cstore',
         cap => 10, # XXX config
         success_handler => sub {
             my($self, $req) = @_;
             my $data = $req->{response}->[0]->content;
+
+            $outer_self->timelog("get_records_and_facets(): got response content");
+
+            # Protect against requests for non-existent records
+            return unless $data->{'unapi.bre'};
+
             my $xml = XML::LibXML->new->parse_string($data->{'unapi.bre'})->documentElement;
 
+            $outer_self->timelog("get_records_and_facets(): parsed xml");
             # Protect against legacy invalid MARCXML that might not have a 901c
             my $bre_id;
             my $bre_id_nodes =  $xml->find('*[@tag="901"]/*[@code="c"]');
@@ -199,8 +255,11 @@ sub get_records_and_facets {
                 $logger->warn("Missing 901 subfield 'c' in " . $xml->toString());
             }
             push(@data, {id => $bre_id, marc_xml => $xml});
+            $outer_self->timelog("get_records_and_facets(): end of success handler");
         }
     );
+
+    $self->timelog("get_records_and_facets(): about to call unapi.bre via json_query (rec_ids has " . scalar(@$rec_ids));
 
     $ses->request(
         'open-ils.cstore.json_query',
@@ -214,6 +273,8 @@ sub get_records_and_facets {
         ]}
     ) for @$rec_ids;
 
+
+    $self->timelog("get_records_and_facets():almost ready to fetch facets");
     # collect the facet data
     my $search = OpenSRF::AppSession->create('open-ils.search');
     my $facet_req = $search->request(
@@ -222,10 +283,12 @@ sub get_records_and_facets {
 
     # gather up the unapi recs
     $ses->session_wait(1);
+    $self->timelog("get_records_and_facets():past session wait");
 
     my $facets = {};
     if ($facet_key) {
         my $tmp_facets = $facet_req->gather(1);
+        $self->timelog("get_records_and_facets(): gathered facet data");
         for my $cmf_id (keys %$tmp_facets) {
 
             # sort highest to lowest match count
@@ -240,6 +303,7 @@ sub get_records_and_facets {
                 data => \@entries
             }
         }
+        $self->timelog("get_records_and_facets(): gathered/sorted facet data");
     } else {
         $facets = undef;
     }
@@ -419,6 +483,29 @@ sub set_file_download_headers {
     );
 
     return Apache2::Const::OK;
+}
+
+sub apache_log_if_event {
+    my ($self, $event, $prefix_text, $success_ok, $level) = @_;
+
+    $prefix_text ||= "Evergreen returned event";
+    $success_ok ||= 0;
+    $level ||= "warn";
+
+    chomp $prefix_text;
+    $prefix_text .= ": ";
+
+    my $code = $U->event_code($event);
+    if (defined $code and ($code or not $success_ok)) {
+        $self->apache->log->$level(
+            $prefix_text .
+            ($event->{textcode} || "") . " ($code)" .
+            ($event->{note} ? (": " . $event->{note}) : "")
+        );
+        return 1;
+    }
+
+    return;
 }
 
 1;

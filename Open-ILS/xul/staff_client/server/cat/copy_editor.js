@@ -224,6 +224,9 @@ function my_init() {
             g.hide_copy_notes_button();
         }
 
+        JSAN.use('util.hide');
+        util.hide.generate_css('ui.hide_copy_editor_fields');
+
     } catch(E) {
         var err_msg = $("commonStrings").getFormattedString('common.exception', ['cat/copy_editor.js', E]);
         try { g.error.sdump('D_ERROR',err_msg); } catch(E) { dump(err_msg); dump(js2JSON(E)); }
@@ -321,6 +324,19 @@ g._apply_template = function(name,apply_volume_editor_template_changes) {
         if (g.templates[ name ] != 'undefined') {
             var template = g.templates[ name ];
             for (var i in template) {
+                if (g.is_field_hidden(i)) {
+                    alert($('catStrings').getFormattedString(
+                        'staff.cat.copy_editor.apply_unsafe_field',
+                        [i]
+                    ));
+                    continue;
+                }
+                if (template[i].field == 'status') {
+                    if (!g.safe_to_edit_copy_status()) {
+                        alert($('catStrings').getFormattedString('staff.cat.copy_editor.apply_unsafe_field',[i]));
+                        continue;
+                    }
+                }
                 g.changed[ i ] = template[ i ];
                 switch( template[i].type ) {
                     case 'attribute' :
@@ -648,6 +664,23 @@ g.safe_to_edit_copy_status = function() {
         return false;
     }
 }
+
+/******************************************************************************************************/
+/* This returns true if the field has been hidden via util.hide */
+
+g.is_field_hidden = function(field) {
+    try {
+        g.data.stash_retrieve();
+        if (g.data.hash.aous['ui.hide_copy_editor_fields']
+            && g.data.hash.aous['ui.hide_copy_editor_fields'].indexOf(field) > -1) {
+            return true;
+        }
+    } catch(E) {
+        g.error.standard_unexpected_error_alert('is_field_hidden?',E);
+        return false;
+    }
+}
+
 
 /******************************************************************************************************/
 /* This concats and uniques all the alert messages for use as the default value for a new alert message */
@@ -1209,6 +1242,7 @@ g.render = function() {
             try {
                 var f = g.panes_and_field_names[h][i]; var fn = f[0]; var attr = f[1].attr;
                 groupbox = document.createElement('groupbox'); document.getElementById(h).appendChild(groupbox);
+                groupbox.setAttribute('hideable',fn);
                 if (attr) {
                     for (var a in attr) {
                         groupbox.setAttribute(a,attr[a]);
@@ -1217,6 +1251,7 @@ g.render = function() {
                 caption = document.createElement('caption'); groupbox.appendChild(caption);
                 caption.setAttribute('label',fn);
                 caption.setAttribute('id','caption_'+fn); // used for focus/keyboard navigation
+                caption.setAttribute('hideable',fn);
                 vbox = document.createElement('vbox'); groupbox.appendChild(vbox); // main display widget goes here
                 if (typeof g.changed[fn] != 'undefined') { addCSSClass(vbox,'copy_editor_field_changed'); }
                 if (typeof g.required[fn] != 'undefined') { addCSSClass(vbox,'copy_editor_field_required'); }
@@ -1288,6 +1323,7 @@ g.render = function() {
         }
     }
 
+    util.hide.generate_css('ui.hide_copy_editor_fields');
 }
 
 /******************************************************************************************************/

@@ -1138,10 +1138,13 @@ sub new_hold_copy_targeter {
 
 					# cancel cause = un-targeted expiration
 					$hold->update( { cancel_time => 'now', cancel_cause => 1 } ); 
+
+					# refresh fields from the DB while still in the xact
+					my $fm_hold = $hold->to_fieldmapper; 
+
 					$self->method_lookup('open-ils.storage.transaction.commit')->run;
 
 					# tell A/T the hold was cancelled
-					my $fm_hold = $hold->to_fieldmapper;
 					my $ses = OpenSRF::AppSession->create('open-ils.trigger');
 					$ses->request('open-ils.trigger.event.autocreate', 
 						'hold_request.cancel.expire_no_target', $fm_hold, $fm_hold->pickup_lib);
@@ -1335,11 +1338,13 @@ sub new_hold_copy_targeter {
 			$log->debug("\t".scalar(@good_copies)." (non-current) copies available for targeting...");
 
 			my $old_best = $hold->current_copy;
+			my $old_best_still_valid = 0; # Assume no, but the next line says yes if it is still a potential.
+			$old_best_still_valid = 1 if ( $old_best && grep { ''.$old_best->id eq ''.$_->id } @$all_copies );
 			$hold->update({ current_copy => undef }) if ($old_best);
 	
 			if (!scalar(@good_copies)) {
 				$log->info("\tNo (non-current) copies eligible to fill the hold.");
-				if ( $old_best && grep { ''.$old_best->id eq ''.$_->id } @$all_copies ) {
+				if ( $old_best_still_valid ) {
 					# the old copy is still available
 					$log->debug("\tPushing current_copy back onto the targeting list");
 					push @good_copies, $old_best;
@@ -1447,10 +1452,13 @@ sub new_hold_copy_targeter {
 
 						# cancel cause = un-targeted expiration
 						$hold->update( { cancel_time => 'now', cancel_cause => 1 } ); 
+
+						# refresh fields from the DB while still in the xact
+						my $fm_hold = $hold->to_fieldmapper; 
+
 						$self->method_lookup('open-ils.storage.transaction.commit')->run;
 
 						# tell A/T the hold was cancelled
-						my $fm_hold = $hold->to_fieldmapper;
 						my $ses = OpenSRF::AppSession->create('open-ils.trigger');
 						$ses->request('open-ils.trigger.event.autocreate', 
 							'hold_request.cancel.expire_no_target', $fm_hold, $fm_hold->pickup_lib);
@@ -1482,14 +1490,25 @@ sub new_hold_copy_targeter {
 				$hold->update( { current_copy => ''.$best->id, prev_check_time => 'now' } );
 				$log->debug("\tUpdating hold [".$hold->id."] with new 'current_copy' [".$best->id."] for hold fulfillment.");
 			} elsif (
-				$old_best &&
+				$old_best_still_valid &&
 				!action::hold_request
 					->search_where(
 						{ current_copy => $old_best->id,
 						  fulfillment_time => undef,
 						  cancel_time => undef,
 						}       
-					)
+					) &&
+				( OpenILS::Utils::PermitHold::permit_copy_hold(
+					{ title => $old_best->call_number->record->to_fieldmapper,
+					  title_descriptor => $old_best->call_number->record->record_descriptor->next->to_fieldmapper,
+					  patron => $hold->usr->to_fieldmapper,
+					  copy => $old_best->to_fieldmapper,
+					  requestor => $hold->requestor->to_fieldmapper,
+					  request_lib => $hold->request_lib->to_fieldmapper,
+					  pickup_lib => $hold->pickup_lib->id,
+					  retarget => 1
+					}
+				))
 			) {     
 				$hold->update( { prev_check_time => 'now', current_copy => ''.$old_best->id } );
 				$log->debug( "\tRetargeting the previously targeted copy [".$old_best->id."]" );
@@ -1670,10 +1689,13 @@ sub reservation_targeter {
 
 				# cancel cause = un-targeted expiration
 				$bresv->update( { cancel_time => 'now' } ); 
+
+				# refresh fields from the DB while still in the xact
+				my $fm_bresv = $bresv->to_fieldmapper;
+
 				$self->method_lookup('open-ils.storage.transaction.commit')->run;
 
 				# tell A/T the reservation was cancelled
-				my $fm_bresv = $bresv->to_fieldmapper;
 				my $ses = OpenSRF::AppSession->create('open-ils.trigger');
 				$ses->request('open-ils.trigger.event.autocreate', 
 					'booking.reservation.cancel.expire_no_target', $fm_bresv, $fm_bresv->pickup_lib);

@@ -46,6 +46,7 @@ INSERT INTO config.internal_flag (name) VALUES ('ingest.disable_metabib_full_rec
 INSERT INTO config.internal_flag (name) VALUES ('ingest.disable_metabib_rec_descriptor');
 INSERT INTO config.internal_flag (name) VALUES ('ingest.disable_metabib_field_entry');
 INSERT INTO config.internal_flag (name) VALUES ('ingest.assume_inserts_only');
+INSERT INTO config.internal_flag (name) VALUES ('serial.rematerialize_on_same_holding_code');
 
 CREATE TABLE config.global_flag (
     label   TEXT    NOT NULL
@@ -86,7 +87,7 @@ CREATE TRIGGER no_overlapping_deps
     BEFORE INSERT OR UPDATE ON config.db_patch_dependencies
     FOR EACH ROW EXECUTE PROCEDURE evergreen.array_overlap_check ('deprecates');
 
-INSERT INTO config.upgrade_log (version, applied_to) VALUES ('0694', :eg_version); -- mrpeters/miker
+INSERT INTO config.upgrade_log (version, applied_to) VALUES ('0711', :eg_version); -- senator
 
 CREATE TABLE config.bib_source (
 	id		SERIAL	PRIMARY KEY,
@@ -736,11 +737,14 @@ CREATE TABLE config.record_attr_index_norm_map (
 );
 
 CREATE TABLE config.coded_value_map (
-    id          SERIAL  PRIMARY KEY,
-    ctype       TEXT    NOT NULL REFERENCES config.record_attr_definition (name) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    code        TEXT    NOT NULL,
-    value       TEXT    NOT NULL,
-    description TEXT
+    id              SERIAL  PRIMARY KEY,
+    ctype           TEXT    NOT NULL REFERENCES config.record_attr_definition (name) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    code            TEXT    NOT NULL,
+    value           TEXT    NOT NULL,
+    description     TEXT,
+    opac_visible    BOOL    NOT NULL DEFAULT TRUE, -- For TPac selectors
+    search_label    TEXT,
+    is_simple       BOOL    NOT NULL DEFAULT FALSE
 );
 
 CREATE VIEW config.language_map AS SELECT code, value FROM config.coded_value_map WHERE ctype = 'item_lang';

@@ -391,7 +391,8 @@ patron.display.prototype = {
                                 urls.EG_ACQ_USER_REQUESTS + '?usr=' + obj.patron.id(),
                                 {},
                                 {
-                                    'get_barcodes' : function(a) { return xulG.get_barcodes(a); }
+                                    'get_barcode' : function(a,b,c) { return xulG.get_barcode(a,b,c); },
+                                    'get_barcode_and_settings' : function(a,b,c) { return xulG.get_barcode_and_settings(a,b,c); }
                                 }
                             );
                         }
@@ -495,7 +496,9 @@ patron.display.prototype = {
                                         'url_prefix' : function(url,secure) { return xulG.url_prefix(url,secure); },
                                         'get_new_session' : function(a) { return xulG.get_new_session(a); },
                                         'new_tab' : function(a,b,c) { return xulG.new_tab(a,b,c); },
-                                        'new_patron_tab' : function(a,b) { return xulG.new_patron_tab(a,b); }
+                                        'new_patron_tab' : function(a,b) { return xulG.new_patron_tab(a,b); },
+                                        'get_barcode' : function(a,b,c) { return xulG.get_barcode(a,b,c); },
+                                        'get_barcode_and_settings' : function(a,b,c) { return xulG.get_barcode_and_settings(a,b,c); }
                                     }
                                 );
                             } catch(E) {
@@ -884,6 +887,7 @@ patron.display.prototype = {
                         }
                     },
                     'get_barcode' : xulG.get_barcode,
+                    'get_barcode_and_settings' : xulG.get_barcode_and_settings,
                     'url_prefix' : xulG.url_prefix
                 }
             );

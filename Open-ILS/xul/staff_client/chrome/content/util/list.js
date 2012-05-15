@@ -9,6 +9,8 @@ util.list = function (id) {
 
     this.unique_row_counter = 0;
 
+    this.sub_sorts = [];
+
     if (!this.node) throw('Could not find element ' + id);
     switch(this.node.nodeName) {
         case 'listbox' : 
@@ -21,6 +23,9 @@ util.list = function (id) {
     JSAN.use('util.error'); this.error = new util.error();
 
     JSAN.use('OpenILS.data'); this.data = new OpenILS.data(); this.data.stash_retrieve();
+
+    JSAN.use('util.functional');
+    JSAN.use('util.widgets');
 
     return this;
 };
@@ -96,6 +101,9 @@ util.list.prototype = {
             var treecols = document.createElement('treecols');
             this.node.appendChild(treecols);
             this.treecols = treecols;
+            if (document.getElementById('column_sort_menu')) {
+                treecols.setAttribute('context','column_sort_menu');
+            }
 
             var check_for_id_collisions = {};
             for (var i = 0; i < this.columns.length; i++) {
@@ -118,6 +126,7 @@ util.list.prototype = {
                     treecol.setAttribute(j,value);
                 }
                 treecols.appendChild(treecol);
+
                 if (this.columns[i].type == 'checkbox') {
                     treecol.addEventListener(
                         'click',
@@ -135,24 +144,124 @@ util.list.prototype = {
                     );
                 } else {
                     treecol.addEventListener(
+                        'sort_first_asc',
+                        function(ev) {
+                            dump('sort_first_asc\n');
+                            ev.target.setAttribute('sortDir','asc');
+                            obj.first_sort = {
+                                'target' : ev.target,
+                                'sortDir' : 'asc'
+                            };
+                            obj.sub_sorts = [];
+                            util.widgets.dispatch('sort',ev.target);
+                        },
+                        false
+                    );
+                    treecol.addEventListener(
+                        'sort_first_desc',
+                        function(ev) {
+                            dump('sort_first_desc\n');
+                            ev.target.setAttribute('sortDir','desc');
+                            obj.first_sort = {
+                                'target' : ev.target,
+                                'sortDir' : 'desc'
+                            };
+                            obj.sub_sorts = [];
+                            util.widgets.dispatch('sort',ev.target);
+                        },
+                        false
+                    );
+                    treecol.addEventListener(
+                        'sort_next_asc',
+                        function(ev) {
+                            dump('sort_next_asc\n');
+                            ev.target.setAttribute('sortDir','asc');
+                            obj.sub_sorts.push({
+                                'target' : ev.target,
+                                'sortDir' : 'asc'
+                            });
+                            util.widgets.dispatch('sort',ev.target);
+                        },
+                        false
+                    );
+                    treecol.addEventListener(
+                        'sort_next_desc',
+                        function(ev) {
+                            dump('sort_next_desc\n');
+                            ev.target.setAttribute('sortDir','desc');
+                            obj.sub_sorts.push({
+                                'target' : ev.target,
+                                'sortDir' : 'desc'
+                            });
+                            util.widgets.dispatch('sort',ev.target);
+                        },
+                        false
+                    );
+
+                    treecol.addEventListener(
                         'click', 
                         function(ev) {
-                            function do_it() {
-                                var sortDir = ev.target.getAttribute('sortDir') || 'desc';
-                                if (sortDir == 'desc') sortDir = 'asc'; else sortDir = 'desc';
-                                ev.target.setAttribute('sortDir',sortDir);
-                                obj._sort_tree(ev.target,sortDir);
+                            if (ev.button == 2 /* context menu click */ || ev.target.getAttribute('no_sort')) {
+                                return;
                             }
 
-                            if (obj.row_count.total != obj.row_count.fleshed && (obj.row_count.total - obj.row_count.fleshed) > 50) {
-                                var r = window.confirm(document.getElementById('offlineStrings').getFormattedString('list.row_fetch_warning',[obj.row_count.fleshed,obj.row_count.total]));
+                            if (ev.ctrlKey) { // sub sort
+                                var sortDir = 'asc';
+                                if (ev.shiftKey) {
+                                    sortDir = 'desc';
+                                }
+                                ev.target.setAttribute('sortDir',sortDir);
+                                obj.sub_sorts.push({
+                                    'target' : ev.target,
+                                    'sortDir' : sortDir
+                                });
+                            } else { // first sort
+                                var sortDir = ev.target.getAttribute('sortDir') || 'desc';
+                                if (sortDir == 'desc') sortDir = 'asc'; else sortDir = 'desc';
+                                if (ev.shiftKey) {
+                                    sortDir = 'desc';
+                                }
+                                ev.target.setAttribute('sortDir',sortDir);
+                                obj.first_sort = {
+                                    'target' : ev.target,
+                                    'sortDir' : sortDir
+                                };
+                                obj.sub_sorts = [];
+                            }
+                            util.widgets.dispatch('sort',ev.target);
+                        },
+                        false
+                    );
+
+                    treecol.addEventListener(
+                        'sort',
+                        function(ev) {
+                            if (!obj.first_sort) {
+                                return;
+                            }
+
+                            function do_it() {
+                                obj._sort_tree();
+                            }
+
+                            if (obj.row_count.total != obj.row_count.fleshed
+                                && (obj.row_count.total - obj.row_count.fleshed) > 50
+                            ) {
+                                var r = window.confirm(
+                                    document.getElementById('offlineStrings').getFormattedString(
+                                        'list.row_fetch_warning',
+                                        [obj.row_count.fleshed,obj.row_count.total]
+                                    )
+                                );
 
                                 if (r) {
                                     setTimeout( do_it, 0 );
                                 }
+
                             } else {
                                     setTimeout( do_it, 0 );
                             }
+
                         },
                         false
                     );
@@ -571,6 +680,7 @@ util.list.prototype = {
                     
                             inc_fleshed();
                     }
+                    obj.refresh_ordinals();
                 },
                 false
             );
@@ -596,6 +706,7 @@ util.list.prototype = {
                     if (obj.row_count.fleshed >= obj.row_count.total) {
                         setTimeout( function() { obj.exec_on_all_fleshed(); }, 0 );
                     }
+                    obj.refresh_ordinals();
                 },
                 false
             );
@@ -731,6 +842,7 @@ util.list.prototype = {
                     
                             inc_fleshed();
                     }
+                    obj.refresh_ordinals();
                 },
                 false
             );
@@ -760,6 +872,7 @@ util.list.prototype = {
                     if (obj.row_count.fleshed >= obj.row_count.total) {
                         setTimeout( function() { obj.exec_on_all_fleshed(); }, 0 );
                     }
+                    obj.refresh_ordinals();
                 },
                 false
             );
@@ -801,29 +914,41 @@ util.list.prototype = {
     'refresh_ordinals' : function() {
         var obj = this;
         try {
-            setTimeout( // Otherwise we can miss a row just added
+            if (obj.refresh_ordinals_timeout_id) { return; }
+
+            function _refresh_ordinals(clear) {
+                var nl = obj.node.getElementsByAttribute('label','_');
+                for (var i = 0; i < nl.length; i++) {
+                    nl[i].setAttribute(
+                        'ord_col',
+                        'true'
+                    );
+                    nl[i].setAttribute( // treecell properties for css styling
+                        'properties',
+                        'ordinal'
+                    );
+                }
+                nl = obj.node.getElementsByAttribute('ord_col','true');
+                for (var i = 0; i < nl.length; i++) {
+                    nl[i].setAttribute(
+                        'label',
+                        // we could just use 'i' here if we trust the order of elements
+                        1 + obj.node.contentView.getIndexOfItem(nl[i].parentNode.parentNode) // treeitem
+                    );
+                }
+                if (clear) { obj.refresh_ordinals_timeout_id = null; }
+            }
+
+            // spamming this to cover race conditions
+            setTimeout(_refresh_ordinals, 500); // for speedy looking UI updates
+            setTimeout(_refresh_ordinals, 2000); // for most uses
+            obj.refresh_ordinals_timeout_id = setTimeout(
                 function() {
-                    var nl = document.getElementsByAttribute('label','_');
-                    for (var i = 0; i < nl.length; i++) {
-                        nl[i].setAttribute(
-                            'ord_col',
-                            'true'
-                        );
-                        nl[i].setAttribute( // treecell properties for css styling
-                            'properties',
-                            'ordinal'
-                        );
-                    }
-                    nl = document.getElementsByAttribute('ord_col','true');
-                    for (var i = 0; i < nl.length; i++) {
-                        nl[i].setAttribute(
-                            'label',
-                            // we could just use 'i' here if we trust the order of elements
-                            1 + obj.node.contentView.getIndexOfItem(nl[i].parentNode.parentNode) // treeitem
-                        );
-                    }
-                }, 1000
+                    _refresh_ordinals(true);
+                },
+                4000 // just in case, say with a slow rendering list
             );
+
         } catch(E) {
             alert('Error in list.js, refresh_ordinals(): ' + E);
         }
@@ -973,6 +1098,7 @@ util.list.prototype = {
             case 'tree' : obj._full_retrieve_tree(params); break;
             default: throw('NYI: Need .full_retrieve() for ' + obj.node.nodeName); break;
         }
+        obj.refresh_ordinals();
     },
 
     '_full_retrieve_tree' : function(params) {
@@ -1556,15 +1682,27 @@ util.list.prototype = {
         obj.full_retrieve();
     },
 
-    '_sort_tree' : function(col,sortDir) {
+    '_sort_tree' : function() {
         var obj = this;
         try {
-            if (obj.node.getAttribute('no_sort') || col.getAttribute('no_sort')) {
+            if (obj.node.getAttribute('no_sort')) {
                 return;
             }
-            var col_pos;
-            for (var i = 0; i < obj.columns.length; i++) { 
-                if (obj.columns[i].id == col.id) col_pos = function(a){return a;}(i); 
+
+            var sorts = [ obj.first_sort ].concat( obj.sub_sorts );
+            var columns = util.functional.map_list(
+                sorts,
+                function(e,idx) {
+                    return e.target;
+                }
+            );
+            var column_positions = [];
+            for (var i = 0; i < columns.length; i++) {
+                for (var j = 0; j < obj.columns.length; j++) {
+                    if (obj.columns[j].id == columns[i].id) {
+                        column_positions.push( function(a){return a;}(j) );
+                    }
+                }
             }
             obj.wrap_in_full_retrieve(
                 function() {
@@ -1575,62 +1713,99 @@ util.list.prototype = {
                         for (var i = 0; i < treeitems.length; i++) {
                             var treeitem = treeitems[i];
                             var treerow = treeitem.firstChild;
-                            var treecell = treerow.childNodes[ col_pos ];
-                            value = ( {
-                                'value' : treecell
-                                    ? treecell.getAttribute('label')
-                                    : '',
-                                'sort_value' : treecell ? treecell.hasAttribute('sort_value')
-                                    ? JSON2js(
-                                        treecell.getAttribute('sort_value'))
-                                    : '' : '',
+
+                            function get_value(treecell) {
+                                value = ( {
+                                    'value' : treecell
+                                        ? treecell.getAttribute('label')
+                                        : '',
+                                    'sort_value' : treecell ? treecell.hasAttribute('sort_value')
+                                        ? JSON2js(
+                                            treecell.getAttribute('sort_value'))
+                                        : '' : ''
+                                } );
+                                return value;
+                            }
+
+                            var values = [];
+                            for (var j = 0; j < column_positions.length; j++) {
+                                var treecell = treerow.childNodes[ column_positions[j] ];
+                                values.push({
+                                    'position' : column_positions[j],
+                                    'value' : get_value(treecell)
+                                });
+                            }
+
+                            rows.push({
+                                'values' : values,
                                 'node' : treeitem
-                            } );
-                            rows.push( value );
+                            });
                         }
-                        rows = rows.sort( function(a,b) { 
-                            if (a.sort_value) {
-                                a = a.sort_value;
-                                b = b.sort_value;
-                            } else {
-                                a = a.value;
-                                b = b.value;
-                                if (col.getAttribute('sort_type')) {
-                                    switch(col.getAttribute('sort_type')) {
-                                        case 'date' :
-                                            JSAN.use('util.date'); // to pull in dojo.date.locale
-                                            a = dojo.date.locale.parse(a,{});
-                                            b = dojo.date.locale.parse(b,{});
-                                        break;
-                                        case 'number' :
-                                            a = Number(a); b = Number(b);
-                                        break;
-                                        case 'money' :
-                                            a = util.money.dollars_float_to_cents_integer(a);
-                                            b = util.money.dollars_float_to_cents_integer(b);
-                                        break;
-                                        case 'title' : /* special case for "a" and "the".  doesn't use marc 245 indicator */
-                                            a = String( a ).toUpperCase().replace( /^\s*(THE|A|AN)\s+/, '' );
-                                            b = String( b ).toUpperCase().replace( /^\s*(THE|A|AN)\s+/, '' );
-                                        break;
-                                        default:
+                        rows = rows.sort( function(A,B) {
+                            function normalize(a,b,p) {
+                                if (a.sort_value) {
+                                    a = a.sort_value;
+                                    b = b.sort_value;
+                                } else {
+                                    a = a.value;
+                                    b = b.value;
+                                    if (obj.columns[p].sort_type) {
+                                        switch(obj.columns[p].sort_type) {
+                                            case 'date' :
+                                                JSAN.use('util.date'); // to pull in dojo.date.locale
+                                                a = dojo.date.locale.parse(a,{});
+                                                b = dojo.date.locale.parse(b,{});
+                                            break;
+                                            case 'number' :
+                                                a = Number(a); b = Number(b);
+                                            break;
+                                            case 'money' :
+                                                a = util.money.dollars_float_to_cents_integer(a);
+                                                b = util.money.dollars_float_to_cents_integer(b);
+                                            break;
+                                            case 'title' : /* special case for "a" and "the".  doesn't use marc 245 indicator */
+                                                a = String( a ).toUpperCase().replace( /^\s*(THE|A|AN)\s+/, '' );
+                                                b = String( b ).toUpperCase().replace( /^\s*(THE|A|AN)\s+/, '' );
+                                            break;
+                                            default:
+                                                a = String( a ).toUpperCase();
+                                                b = String( b ).toUpperCase();
+                                            break;
+                                        }
+                                    } else {
+                                        if (typeof a == 'string' || typeof b == 'string') {
                                             a = String( a ).toUpperCase();
                                             b = String( b ).toUpperCase();
-                                        break;
-                                    }
-                                } else {
-                                    if (typeof a == 'string' || typeof b == 'string') {
-                                        a = String( a ).toUpperCase();
-                                        b = String( b ).toUpperCase();
+                                        }
                                     }
                                 }
+                                return [ a, b ];
                             }
-                            //dump('sorting: type = ' + col.getAttribute('sort_type') + ' a = ' + a + ' b = ' + b + ' a<b= ' + (a<b) + ' a>b= ' + (a>b) + '\n');
-                            if (a < b) return -1; 
-                            if (a > b) return 1; 
+
+                            for (var i = 0; i < sorts.length; i++) {
+                                var values;
+                                if (sorts[i].sortDir == 'asc') {
+                                    values = normalize(
+                                        A['values'][i]['value'],
+                                        B['values'][i]['value'],
+                                        A['values'][i]['position']
+                                    );
+                                } else {
+                                    values = normalize(
+                                        B['values'][i]['value'],
+                                        A['values'][i]['value'],
+                                        A['values'][i]['position']
+                                    );
+                                }
+                                if (values[0] < values[1] ) {
+                                    return -1;
+                                }
+                                if (values[0] > values[1] ) {
+                                    return 1;
+                                }
+                            }
                             return 0; 
                         } );
-                        if (sortDir == 'asc') rows = rows.reverse();
                         while(obj.treechildren.lastChild) obj.treechildren.removeChild( obj.treechildren.lastChild );
                         for (var i = 0; i < rows.length; i++) {
                             obj.treechildren.appendChild( rows[i].node );
@@ -1986,6 +2161,10 @@ util.list.prototype = {
             JSAN.use('util.network'); obj.network = new util.network();
             JSAN.use('util.money');
 
+            // FIXME: backwards compatability with server/patron code and the old patron.util.std_map_row_to_columns.
+            // Will remove in a separate commit and change all instances of obj.OpenILS.data to obj.data at the same time.
+            obj.OpenILS = { 'data' : obj.data };
+
             var my = row.my;
             var values = [];
             var sort_values = [];
@@ -2007,13 +2186,7 @@ util.list.prototype = {
                             }
                         break;
                         case 'string' :
-                            cmd += 'try { '
-                                + cols[i].sort_value
-                                + '; values['
-                                + i
-                                +'] = v; } catch(E) { sort_values['
-                                + i
-                                + '] = error_value; }';
+                            sort_values[i] = JSON2js(cols[i].sort_value);
                         break;
                         default:
                             cmd += 'sort_values['+i+'] = values[' + i + '];';

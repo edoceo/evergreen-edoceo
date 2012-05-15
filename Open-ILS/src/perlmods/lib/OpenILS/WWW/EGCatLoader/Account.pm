@@ -176,11 +176,18 @@ sub load_myopac_prefs_notify {
     my $self = shift;
     my $e = $self->editor;
 
+
+    my $stat = $self->_load_user_with_prefs;
+    return $stat if $stat;
+
     my $user_prefs = $self->fetch_optin_prefs;
     $user_prefs = $self->update_optin_prefs($user_prefs)
         if $self->cgi->request_method eq 'POST';
 
     $self->ctx->{opt_in_settings} = $user_prefs;
+
+    return Apache2::Const::OK
+        unless $self->cgi->request_method eq 'POST';
 
     my %settings;
     my $set_map = $self->ctx->{user_setting_map};
@@ -343,6 +350,7 @@ sub load_myopac_prefs_settings {
     my @user_prefs = qw/
         opac.hits_per_page
         opac.default_search_location
+        opac.default_pickup_location
     /;
 
     my $stat = $self->_load_user_with_prefs;
@@ -600,36 +608,24 @@ sub load_place_hold {
 
     $logger->info("Looking at hold_type: " . $ctx->{hold_type} . " and targets: @targets");
 
-    # if the staff client provides a patron barcode, fetch the patron
-    if (my $bc = $self->cgi->cookie("patron_barcode")) {
-        $ctx->{patron_recipient} = $U->simplereq(
-            "open-ils.actor", "open-ils.actor.user.fleshed.retrieve_by_barcode",
-            $self->editor->authtoken, $bc
-        ) or return Apache2::Const::HTTP_BAD_REQUEST;
-
-        $ctx->{default_pickup_lib} = $ctx->{patron_recipient}->home_ou;
-    } else {
-        $ctx->{staff_recipient} = $self->editor->retrieve_actor_user([
-            $e->requestor->id,
-            {
-                flesh => 1,
-                flesh_fields => {
-                    au => ['settings']
-                }
+    $ctx->{staff_recipient} = $self->editor->retrieve_actor_user([
+        $e->requestor->id,
+        {
+            flesh => 1,
+            flesh_fields => {
+                au => ['settings', 'card']
             }
-        ]) or return Apache2::Const::HTTP_INTERNAL_SERVER_ERROR;
-    }
+        }
+    ]) or return Apache2::Const::HTTP_INTERNAL_SERVER_ERROR;
     my $user_setting_map = {
         map { $_->name => OpenSRF::Utils::JSON->JSON2perl($_->value) }
             @{
-                $ctx->{patron_recipient}
-                ? $ctx->{patron_recipient}->settings
-                : $ctx->{staff_recipient}->settings
+                $ctx->{staff_recipient}->settings
             }
     };
     $ctx->{user_setting_map} = $user_setting_map;
 
-    my $default_notify = $$user_setting_map{'opac.hold_notify'} || '';
+    my $default_notify = (defined $$user_setting_map{'opac.hold_notify'} ? $$user_setting_map{'opac.hold_notify'} : 'email:phone');
     if ($default_notify =~ /email/) {
         $ctx->{default_email_notify} = 'checked';
     } else {
@@ -644,6 +640,11 @@ sub load_place_hold {
         $ctx->{default_sms_notify} = 'checked';
     } else {
         $ctx->{default_sms_notify} = '';
+    }
+
+    # If we have a default pickup location, grab it
+    if ($$user_setting_map{'opac.default_pickup_location'}) {
+        $ctx->{default_pickup_lib} = $$user_setting_map{'opac.default_pickup_location'};
     }
 
     my $request_lib = $e->requestor->ws_ou;
@@ -904,7 +905,7 @@ sub attempt_hold_placement {
                             $hdata->{could_override} = 1;
                             $hdata->{age_protect} = 1;
                         } else {
-                            $hdata->{could_override} = $self->test_could_override($hdata->{hold_failed_event});
+                            $hdata->{could_override} = $result->{place_unfillable};
                         }
                     } elsif (ref $result eq 'ARRAY') {
                         $hdata->{hold_failed_event} = $result->[0];
@@ -913,7 +914,7 @@ sub attempt_hold_placement {
                             $hdata->{could_override} = 1;
                             $hdata->{age_protect} = 1;
                         } else {
-                            $hdata->{could_override} = $self->test_could_override($hdata->{hold_failed_event});
+                            $hdata->{could_override} = $result->[4]; # place_unfillable
                         }
                     }
                 }
