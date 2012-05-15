@@ -632,7 +632,7 @@ function load_item() {
                     window.xulG.new_patron_tab( {}, { 'id' : au_obj.id() } );
                     return;
                 }
-                util.clipboard.put(au_obj.card().barcode())
+                copy_to_clipboard(au_obj.card().barcode());
             };
 
             set("hold_status", details.hold.status()); 
