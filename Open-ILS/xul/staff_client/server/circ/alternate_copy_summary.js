@@ -629,10 +629,10 @@ function load_item() {
             $('hold_patron_name').setAttribute('value', $('circStrings').getFormattedString('staff.circ.copy_details.user_details', [au_obj.family_name(), au_obj.first_given_name(), au_obj.card().barcode()]) );
             $('hold_patron_name').onclick = function(e) {
                 if (e.ctrlKey) {
-                    window.xulG.new_patron_tab( {}, { 'id' : au_obj.id() } );
+                    copy_to_clipboard(au_obj.card().barcode());
                     return;
                 }
-                copy_to_clipboard(au_obj.card().barcode());
+                window.xulG.new_patron_tab( {}, { 'id' : au_obj.id() } );
             };
 
             set("hold_status", details.hold.status()); 
