@@ -1,6 +1,5 @@
 function my_init() {
     try {
-        netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
         if (typeof JSAN == 'undefined') { throw( $("commonStrings").getString('common.jsan.missing') ); }
         JSAN.errorLevel = "die"; // none, warn, or die
         JSAN.addRepository('/xul/server/');
@@ -508,7 +507,6 @@ function init_lists() {
             $('copy_details').setAttribute('disabled', g.bill_list_selection.length == 0);
         },
         'on_click' : function(ev) {
-            netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect UniversalBrowserRead');
             var row = {}; var col = {}; var nobj = {};
             g.bill_list.node.treeBoxObject.getCellAt(ev.clientX,ev.clientY,row,col,nobj);
             if (row.value == -1) return;
@@ -840,7 +838,6 @@ function apply_payment() {
                 if (no_print_prompting) {
                     if (no_print_prompting.indexOf( "Bill Pay" ) > -1) { return; } // Skip print attempt
                 }
-                netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
                 g.data.stash_retrieve();
                 var template = 'bill_payment';
                 JSAN.use('patron.util'); JSAN.use('util.functional');
@@ -916,6 +913,38 @@ function pay(payment_blob) {
             note : payment_blob.note
         }
         var robj = g.network.simple_request( 'BILL_PAY', [ ses(), payment_blob, g.patron.last_xact_id() ]);
+
+        try {
+            g.error.work_log(
+                $('circStrings').getFormattedString(
+                    robj && robj.payments
+                        ? 'staff.circ.work_log_payment_attempt.success.message'
+                        : 'staff.circ.work_log_payment_attempt.failure.message',
+                    [
+                        ses('staff_usrname'), // 1 - Staff Username
+                        g.patron.family_name(), // 2 - Patron Family
+                        g.patron.card().barcode(), // 3 - Patron Barcode
+                        g.previous_summary.original_balance, // 4 - Original Balance
+                        g.previous_summary.voided_balance, // 5 - Voided Balance
+                        g.previous_summary.payment_received, // 6 - Payment Received
+                        g.previous_summary.payment_applied, // 7 - Payment Applied
+                        g.previous_summary.change_given, // 8 - Change Given
+                        g.previous_summary.credit_given, // 9 - Credit Given
+                        g.previous_summary.new_balance, // 10 - New Balance
+                        g.previous_summary.payment_type, // 11 - Payment Type
+                        g.previous_summary.note, // 12 - Note
+                        robj && robj.textcode ? robj.textcode : robj // 13 - API call result
+                    ]
+                ), {
+                    'au_id' : g.patron.id(),
+                    'au_family_name' : g.patron.family_name(),
+                    'au_barcode' : g.patron.card().barcode()
+                }
+            );
+        } catch(E) {
+            alert('Error logging payment in bill2.js: ' + E);
+        }
+
         if (typeof robj.ilsevent != 'undefined') {
             switch(robj.textcode) {
                 case 'SUCCESS' : return true; break;

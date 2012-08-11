@@ -16,14 +16,24 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
              * FlattenerGrid in their own right */
             "columnReordering": true,
             "columnPersistKey": null,
-            "showLoadFilter": false,    /* use FlattenerFilterDialog */
+            "autoCoreFields": false,
+            "autoFieldFields": null,
+            "showLoadFilter": false,    /* use FlattenerFilter(Dialog|Pane) */
+            "filterAlwaysInDiv": null,  /* use FlattenerFilterPane and put its
+                                           content in this HTML element */
+            "fetchLock": false,
+            "filterInitializers": null,
+            "filterWidgetBuilders": null,
+            "filterSemaphore": null,
+            "filterSemaphoreCallback": null,
 
-            /* These potential constructor arguments maybe useful to
+            /* These potential constructor arguments may be useful to
              * FlattenerGrid in their own right, and are passed to
              * FlattenerStore. */
             "fmClass": null,
             "fmIdentifier": null,
             "mapExtras": null,
+            "sortFieldReMap": null,
             "defaultSort": null,  /* whatever any part of the UI says will
                                      /replace/ this */
             "baseSort": null,     /* will contains what the columnpicker
@@ -53,12 +63,12 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
                 /* These are the fields defined in thead -> tr -> [th,th,...].
                  * For purposes of building the map, where each field has
                  * three boolean attributes "display", "sort" and "filter",
-                 * assume "display" and "sort" are always true for these.
+                 * assume "display" is always true for these.
                  * That doesn't mean that at the UI level we can't hide a
                  * column later.
                  *
                  * If you need extra fields in the map for which display
-                 * or sort should *not* be true, use mapExtras.
+                 * should *not* be true, use mapExtras.
                  */
                 dojo.forEach(
                     fields, function(field) {
@@ -68,7 +78,7 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
                         map[field.field] = {
                             "display": true,
                             "filter": (field.ffilter || false),
-                            "sort": true,
+                            "sort": field.fsort,
                             "path": field.fpath || field.field
                         };
                         /* The following attribute is not for the flattener
@@ -133,6 +143,77 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
                 return clean;
             },
 
+            /* Given the hint of a class to start at, follow path to the end
+             * and return information on the last field.  */
+            "_followPathToEnd": function(hint, path, allow_selector_backoff) {
+                function _fm_is_selector_for_class(h, field) {
+                    var cl = fieldmapper.IDL.fmclasses[h];
+                    return (cl.field_map[cl.pkey].selector == field);
+                }
+
+                var last_field, last_hint;
+                var orig_path = dojo.clone(path);
+                var field, field_def;
+
+                while (field = path.shift()) {
+                    /* XXX this assumes we have the whole IDL loaded. I
+                     * guess we could teach this to work by loading classes
+                     * on demand when we don't have the whole IDL loaded. */
+                    field_def =
+                        fieldmapper.IDL.fmclasses[hint].field_map[field];
+
+                    if (!field_def) {
+                        /* This can be ok in some cases. Columns following
+                         * IDL paths involving links with a nonempty "map"
+                         * attribute can be used for display only (no
+                         * sort, no filter). */
+                        console.info(
+                            "Lost our way in IDL at hint " + hint +
+                            ", field " + field + "; may be ok"
+                        );
+                        return null;
+                    }
+
+                    if (field_def["class"]) {
+                        last_field = field;
+                        last_hint = hint;
+
+                        hint = field_def["class"];
+                    } else if (path.length) {
+                        /* There are more fields left but we can't follow
+                         * the chain via IDL any further. */
+                        throw new Error(
+                            "_calculateMapTerminii can't parse path " +
+                            orig_path + " (at " + field + ")"
+                        );
+                    }
+                }
+
+                var datatype = field_def.datatype;
+                var indirect = false;
+                /* If allowed, back off the last field in the path if it's a
+                 * selector for its class, because the preceding field will be
+                 * a better thing to hand to AutoFieldWidget.
+                 */
+                if (orig_path.length > 1 && allow_selector_backoff &&
+                        _fm_is_selector_for_class(hint, field_def.name)) {
+                    hint = last_hint;
+                    field = last_field;
+                    datatype = "link";
+                    indirect = true;
+                } else {
+                    field = field_def.name;
+                }
+
+                return {
+                    "fmClass": hint,
+                    "name": field,
+                    "label": field_def.label,
+                    "datatype": datatype,
+                    "indirect": indirect
+                };
+            },
+
             /* The FlattenerStore doesn't need this, but it has at least two
              * uses: 1) FlattenerFilterDialog, 2) setting column header labels
              * to IDL defaults.
@@ -141,70 +222,17 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
              * (actually probably common) cases, they won't really be the last
              * field in a path, but the next-to-last. Read on. */
             "_calculateMapTerminii": function() {
-                function _fm_is_selector_for_class(hint, field) {
-                    var cl = fieldmapper.IDL.fmclasses[hint];
-                    return (cl.field_map[cl.pkey].selector == field);
-                }
-
-                function _follow_to_end(hint, path) {
-                    var last_field, last_hint;
-                    var orig_path = dojo.clone(path);
-                    var field;
-
-                    while (field = path.shift()) {
-                        /* XXX this assumes we have the whole IDL loaded. I
-                         * guess we could teach this to work by loading classes
-                         * on demand when we don't have the whole IDL loaded. */
-                        var field_def =
-                            fieldmapper.IDL.fmclasses[hint].field_map[field];
-
-                        if (field_def["class"] && path.length) {
-                            last_field = field;
-                            last_hint = hint;
-
-                            hint = field_def["class"];
-                        } else if (path.length) {
-                            /* There are more fields left but we can't follow
-                             * the chain via IDL any further. */
-                            throw new Error(
-                                "_calculateMapTerminii can't parse path " +
-                                orig_path + " (at " + field + ")"
-                            );
-                        } else {
-                            break;  /* keeps field defined after loop */
-                        }
-                    }
-
-                    var datatype = field_def.datatype;
-                    var indirect = false;
-                    /* Back off the last field in the path if it's a selector
-                     * for its class, because the preceding field will be
-                     * a better thing to hand to AutoFieldWidget.
-                     */
-                    if (orig_path.length > 1 &&
-                            _fm_is_selector_for_class(hint, field)) {
-                        hint = last_hint;
-                        field = last_field;
-                        datatype = "link";
-                        indirect = true;
-                    }
-
-                    return {
-                        "fmClass": hint,
-                        "name": field,
-                        "label": field_def.label,
-                        "datatype": datatype,
-                        "indirect": indirect
-                    };
-                }
-
                 this.mapTerminii = [];
                 for (var column in this.mapClause) {
+                    var end = this._followPathToEnd(
+                        this.fmClass,
+                        this.mapClause[column].path.split(/\./),
+                        true /* allow selector backoff */
+                    );
+                    if (!end)
+                        continue;
                     var terminus = dojo.mixin(
-                        _follow_to_end(
-                            this.fmClass,
-                            this.mapClause[column].path.split(/\./)
-                        ), {
+                        end, {
                             "simple_name": column,
                             "isfilter": this.mapClause[column].filter
                         }
@@ -217,8 +245,7 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
             },
 
             "_supplementHeaderNames": function() {
-                /* You'd be surprised how rarely this make sense in Flattener
-                 * use cases, but if we didn't give a particular header cell
+                /* If we didn't give a particular header cell
                  * (<th>) a display name (the innerHTML of that <th>), then
                  * use the IDL to provide the label of the terminus of the
                  * flattener path for that column. It may be better than using
@@ -237,18 +264,141 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
                 );
             },
 
+            "_columnOrderingAndLabels": function() {
+                var labels = [];
+                var columns = [];
+
+                this.views.views[0].structure.cells[0].forEach(
+                    function(c) {
+                        if (!c.field.match(/^\+/)) {
+                            labels.push(c.name);
+                            columns.push(c.field);
+                        }
+                    }
+                );
+
+                return {"labels": labels, "columns": columns};
+            },
+
+            "_getAutoFieldFields": function(fmclass) {
+                return dojo.clone(
+                    fieldmapper.IDL.fmclasses[fmclass].fields)
+                .filter(
+                    function(field) {
+                        return !field.virtual && field.datatype != "link";
+                    }
+                ).sort(
+                    function(a, b) { return a.label > b.label ? 1 : -1; }
+                );
+            },
+
+            /* Take our core class (this.fmClass) and add table columns for
+             * any field we don't already have covered by actual hard-coded
+             * <th> columns. */
+            "_addAutoCoreFields": function() {
+                var cell_list = this.structure[0].cells[0];
+                var fields = dojo.clone(
+                    fieldmapper.IDL.fmclasses[this.fmClass].fields
+                ).sort(
+                    function(a, b) { return a.label > b.label ? 1 : -1; }
+                );
+
+                dojo.forEach(
+                    fields, function(f) {
+                        if (f.datatype == "link" || f.virtual)
+                            return;
+
+                        if (cell_list.filter(
+                            function(c) {
+                                if (!c.fpath) return false;
+                                return c.fpath.split(/\./)[0] == f.name;
+                            }
+                        ).length)
+                            return;
+
+                        cell_list.push({
+                            "field": f.name,
+                            "name": f.label,
+                            "fsort": true,
+                            "_visible": false
+                        });
+                    }
+                );
+            },
+
+            "_addAutoFieldFields": function(paths) {
+                var self = this;
+                var n = 0;
+
+                dojo.forEach(
+                    paths, function(path) {
+                        /* The beginning is the end. */
+                        var beginning = self._followPathToEnd(
+                            self.fmClass, path.split(/\./), false
+                        );
+                        if (!beginning) {
+                            return;
+                        } else {
+                            dojo.forEach(
+                                self._getAutoFieldFields(beginning.fmClass),
+                                function(field) {
+                                    var would_be_path =
+                                        path + "." + field.name;
+                                    var wbp_re =
+                                        new RegExp("^" + would_be_path);
+                                    if (!self.structure[0].cells[0].filter(
+                                        function(c) {
+                                            return c.fpath &&
+                                                c.fpath.match(wbp_re);
+                                        }
+                                    ).length) {
+                                        self.structure[0].cells[0].push({
+                                            "field": "AUTO_" + beginning.name +
+                                                "_" + field.name,
+                                            "name": beginning.label + " - " +
+                                                field.label,
+                                            "fsort": true,
+                                            "fpath": would_be_path,
+                                            "_visible": false
+                                        });
+                                    }
+                                }
+                            );
+                        }
+                    }
+                );
+            },
+
+            "_addAutoFields": function() {
+                if (this.autoCoreFields)
+                    this._addAutoCoreFields();
+
+                if (dojo.isArray(this.autoFieldFields))
+                    this._addAutoFieldFields(this.autoFieldFields);
+
+                this.setStructure(this.structure);
+            },
+
             "constructor": function(args) {
                 dojo.mixin(this, args);
 
                 this.fmIdentifier = this.fmIdentifier ||
                     fieldmapper.IDL.fmclasses[this.fmClass].pkey;
+
+                this.overrideEditWidgets = {};
+                this.overrideEditWidgetClass = {};
+                this.overrideWidgetArgs = {};
             },
 
             "startup": function() {
-
                 /* Save original query for further filtering later */
                 this._baseQuery = dojo.clone(this.query);
+
+                this._addAutoFields();
+
                 this._startupGridHelperColumns();
+
+                this._generateMap();
 
                 if (!this.columnPicker) {
                     this.columnPicker =
@@ -271,6 +421,17 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
                 this.inherited(arguments);
             },
 
+            "canSort": function(idx, skip_structure /* API abuse */) {
+                var initial = this.inherited(arguments);
+
+                /* idx is one-based instead of zero-based for a reason. */
+                var view_idx = Math.abs(idx) - 1;
+                return initial && (
+                    skip_structure ||
+                        this.views.views[0].structure.cells[0][view_idx].fsort
+                );
+            },
+
             /*  Maps ColumnPicker sort fields to the correct format.
                 If no sort fields specified, falls back to defaultSort */
             "_mapCPSortFields": function(sortFields) {
@@ -287,25 +448,25 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
 
             "_finishStartup": function(sortFields) {
 
-                this.setStore(
+                this._setStore( /* Seriously, let's leave this as _setStore. */
                     new openils.FlattenerStore({
                         "fmClass": this.fmClass,
                         "fmIdentifier": this.fmIdentifier,
-                        "mapClause": (this.mapClause ||
-                            this._cleanMapForStore(this._generateMap())),
+                        "mapClause": this._cleanMapForStore(this.mapClause),
                         "baseSort": this.baseSort,
-                        "defaultSort": this._mapCPSortFields(sortFields)
+                        "defaultSort": this._mapCPSortFields(sortFields),
+                        "sortFieldReMap": this.sortFieldReMap
+
                     }), this.query
                 );
 
                 // pick up any column label changes
                 this.columnPicker.reloadStructure();
 
-                this._showing_create_pane = false;
+                if (!this.fetchLock)
+                    this._refresh(true);
 
-                this.overrideEditWidgets = {};
-                this.overrideEditWidgetClass = {};
-                this.overrideWidgetArgs = {};
+                this._showing_create_pane = false;
 
                 if (this.editOnEnter)
                     this._applyEditOnEnter();
@@ -323,14 +484,21 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
                 dojo.place(this.linkHolder.domNode, this.domNode, "before");
 
                 if (this.showLoadFilter) {
-                    dojo.require("openils.widget.FlattenerFilterDialog");
-                    this.filterDialog =
-                        new openils.widget.FlattenerFilterDialog({
+                    var which_filter_ui = this.filterAlwaysInDiv ?
+                        "FlattenerFilterPane" : "FlattenerFilterDialog";
+
+                    dojo.require("openils.widget." + which_filter_ui);
+                    this.filterUi =
+                        new openils.widget[which_filter_ui]({
                             "fmClass": this.fmClass,
-                            "mapTerminii": this.mapTerminii
+                            "mapTerminii": this.mapTerminii,
+                            "useDiv": this.filterAlwaysInDiv,
+                            "compact": true,
+                            "initializers": this.filterInitializers,
+                            "widgetBuilders": this.filterWidgetBuilders
                         });
 
-                    this.filterDialog.onApply = dojo.hitch(
+                    this.filterUi.onApply = dojo.hitch(
                         this, function(filter) {
                             this.filter(
                                 dojo.mixin(filter, this._baseQuery),
@@ -339,17 +507,36 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
                         }
                     );
 
-                    this.filterDialog.startup();
-                    dojo.create(
-                        "a", {
-                            "innerHTML": "Filter",  /* XXX i18n */
-                            "href": "javascript:void(0);",
-                            "onclick": dojo.hitch(this, function() {
-                                this.filterDialog.show();
-                            })
-                        }, this.linkHolder.domNode
-                    );
+                    this.filterUi.startup();
+
+                    if (this.filterSemaphore && this.filterSemaphore()) {
+                        if (this.filterSemaphoreCallback)
+                            this.filterSemaphoreCallback();
+                    }
+                    if (!this.filterAlwaysInDiv) {
+                        dojo.create(
+                            "a", {
+                                "innerHTML": "Filter",  /* XXX i18n */
+                                "href": "javascript:void(0);",
+                                "onclick": dojo.hitch(this, function() {
+                                    this.filterUi.show();
+                                })
+                            }, this.linkHolder.domNode
+                        );
+                    }
                 }
+            },
+
+            "refresh": function() {
+                this.fetchLock = false;
+                this._refresh(/* isRender */ true);
+            },
+
+            "_fetch": function() {
+                if (this.fetchLock)
+                    return;
+                else
+                    return this.inherited(arguments);
             },
 
             /* ******** below are methods mostly copied but
@@ -662,6 +849,50 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
                         );
                     }
                 );
+            },
+
+            "getSelectedIDs": function() {
+                return this.getSelectedItems().map(
+                    dojo.hitch(
+                        this,
+                        function(item) { return this.store.getIdentity(item); }
+                    )
+                );
+            },
+
+            /* Print the same data that the Flattener is feeding to the
+             * grid, sorted the same way too. Remove limit and offset (i.e.,
+             * print it all) unless those are passed in to the print() method.
+             */
+            "print": function(limit, offset, query_mixin) {
+                var coal = this._columnOrderingAndLabels();
+                var req = {
+                    "query": dojo.mixin({}, this.query, query_mixin),
+                    "queryOptions": {
+                        "columns": coal.columns,
+                        "labels": coal.labels
+                    },
+                    "onComplete": function(text) {
+                        openils.Util.printHtmlString(text);
+                    }
+                };
+
+                if (limit) {
+                    req.count = limit;
+                    req.start = offset || 0;
+                } else {
+                    req.queryOptions.all = true;
+                }
+
+                this.store.fetchToPrint(req);
+            },
+
+            "printSelected": function() {
+                var id_blob = {};
+                id_blob[this.store.getIdentityAttributes()[0]] =
+                    this.getSelectedIDs();
+
+                this.print(null, null, id_blob);
             }
         }
     );
@@ -681,6 +912,15 @@ if (!dojo._hasResource["openils.widget.FlattenerGrid"]) {
                     var value = dojo.attr(node, a);
                     if (value)
                         cellDef[a] = value;
+                }
+            );
+
+            /* fsort and _visible are different. Assume true unless defined. */
+            dojo.forEach(
+                ["fsort", "_visible"], function(a) {
+                    var val = dojo.attr(node, a);
+                    cellDef[a] = (typeof val == "undefined" || val === null) ?
+                        true : dojo.fromJson(val);
                 }
             );
         };

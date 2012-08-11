@@ -232,8 +232,10 @@ patron.holds.prototype = {
                     'alt_view_btn' : [
                         ['render'],
                         function(e) {
-                            e.setAttribute('label', document.getElementById("circStrings").getString('staff.circ.holds.alt_view.label'));
-                            e.setAttribute('accesskey', document.getElementById("circStrings").getString('staff.circ.holds.alt_view.accesskey'));
+                            return function() {
+                                e.setAttribute('label', document.getElementById("circStrings").getString('staff.circ.holds.alt_view.label'));
+                                e.setAttribute('accesskey', document.getElementById("circStrings").getString('staff.circ.holds.alt_view.accesskey'));
+                            };
                         }
                     ],
                     'cmd_alt_view' : [
@@ -252,7 +254,6 @@ patron.holds.prototype = {
                                     n.setAttribute('toggle','1');
                                     n.setAttribute('label', document.getElementById("circStrings").getString('staff.circ.holds.list_view.label'));
                                     n.setAttribute('accesskey', document.getElementById("circStrings").getString('staff.circ.holds.list_view.accesskey'));
-                                    netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
                                     if (obj.retrieve_ids.length == 0) return;
                                     var f = obj.browser.get_content();
                                     xulG.ahr_id = obj.retrieve_ids[0].id;
@@ -376,12 +377,50 @@ patron.holds.prototype = {
                                 });
 
                                 var loc = urls.XUL_BROWSER + "?url=" + window.escape(
-                                    xulG.url_prefix("/opac/extras/circ/alt_holds_print.html").replace("http:","https:")
+                                    xulG.url_prefix("ALT_HOLDS_PRINT")
                                 );
                                 xulG.new_tab(
                                     loc, {
                                         "tab_name": "Printable Pull List", /* XXX i18n */
                                         "browser": false
+                                    }, content_params
+                                );
+                            } catch (E) {
+                                g.error.sdump("D_ERROR", E);
+                            }
+                        }
+                    ],
+                    'cmd_simplified_pull_list' : [
+                        ['command'],
+                        function() {
+                            try {
+                                var content_params = {
+                                    "session": ses(),
+                                    "authtime": ses("authtime"),
+                                    "no_xulG": false,
+                                    "show_nav_buttons": true,
+                                    "show_print_button": true
+                                };
+                                ["url_prefix", "new_tab", "set_tab",
+                                    "close_tab", "new_patron_tab",
+                                    "set_patron_tab", "volume_item_creator",
+                                    "get_new_session",
+                                    "holdings_maintenance_tab", "set_tab_name",
+                                    "open_chrome_window", "url_prefix",
+                                    "network_meter", "page_meter",
+                                    "set_statusbar", "set_help_context"
+                                ].forEach(function(k) {
+                                    content_params[k] = xulG[k];
+                                });
+
+                                var loc = urls.XUL_BROWSER + "?url=" + window.escape(
+                                    xulG.url_prefix("/eg/circ/hold_pull_list").replace("http:","https:")
+                                );
+                                xulG.new_tab(
+                                    loc, {
+                                        "tab_name": "Simplified Pull List", /* XXX i18n */
+                                        "browser": false,
+                                        "show_print_button": false
                                     }, content_params
                                 );
                             } catch (E) {
@@ -458,7 +497,6 @@ patron.holds.prototype = {
                                 bot_xml += 'accesskey="'+ $("patronStrings").getString('staff.patron.holds.holds_edit_selection_depth.done.accesskey') +'" name="fancy_submit"/>';
                                 bot_xml += '<button label="'+ $("patronStrings").getString('staff.patron.holds.holds_edit_selection_depth.cancel.label') +'"';
                                 bot_xml += 'accesskey="'+ $("patronStrings").getString('staff.patron.holds.holds_edit_selection_depth.cancel.accesskey') +'" name="fancy_cancel"/></hbox>';
-                                netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect UniversalBrowserWrite');
                                 //obj.data.temp_mid = xml; obj.data.stash('temp_mid');
                                 //obj.data.temp_bot = bot_xml; obj.data.stash('temp_bot');
                                 JSAN.use('util.window'); var win = new util.window();
@@ -527,7 +565,6 @@ patron.holds.prototype = {
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_edit_pickup_lib.done.accesskey')+'" name="fancy_submit"/>';
                                 bot_xml += '<button label="'+$("patronStrings").getString('staff.patron.holds.holds_edit_pickup_lib.cancel.label')+'"';
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_edit_pickup_lib.cancel.accesskey')+'" name="fancy_cancel"/></hbox>';
-                                netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect UniversalBrowserWrite');
                                 //obj.data.temp_mid = xml; obj.data.stash('temp_mid');
                                 //obj.data.temp_bot = bot_xml; obj.data.stash('temp_bot');
                                 JSAN.use('util.window'); var win = new util.window();
@@ -577,7 +614,6 @@ patron.holds.prototype = {
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_edit_phone_notify.btn_done.accesskey')+'" name="fancy_submit"/>';
                                 bot_xml += '<button label="'+$("patronStrings").getString('staff.patron.holds.holds_edit_phone_notify.btn_cancel.label')+'"';
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_edit_phone_notify.btn_cancel.accesskey')+'" name="fancy_cancel"/></hbox>';
-                                netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect UniversalBrowserWrite');
                                 //obj.data.temp_mid = xml; obj.data.stash('temp_mid');
                                 //obj.data.temp_bot = bot_xml; obj.data.stash('temp_bot');
                                 JSAN.use('util.window'); var win = new util.window();
@@ -629,7 +665,6 @@ patron.holds.prototype = {
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_edit_sms_notify.btn_done.accesskey')+'" name="fancy_submit"/>';
                                 bot_xml += '<button label="'+$("patronStrings").getString('staff.patron.holds.holds_edit_sms_notify.btn_cancel.label')+'"';
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_edit_sms_notify.btn_cancel.accesskey')+'" name="fancy_cancel"/></hbox>';
-                                netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect UniversalBrowserWrite');
                                 //obj.data.temp_mid = xml; obj.data.stash('temp_mid');
                                 //obj.data.temp_bot = bot_xml; obj.data.stash('temp_bot');
                                 JSAN.use('util.window'); var win = new util.window();
@@ -703,7 +738,6 @@ patron.holds.prototype = {
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_edit_sms_carrier.btn_done.accesskey')+'" name="fancy_submit"/>';
                                 bot_xml += '<button label="'+$("patronStrings").getString('staff.patron.holds.holds_edit_sms_carrier.btn_cancel.label')+'"';
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_edit_sms_carrier.btn_cancel.accesskey')+'" name="fancy_cancel"/></hbox>';
-                                netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect UniversalBrowserWrite');
                                 //obj.data.temp_mid = xml; obj.data.stash('temp_mid');
                                 //obj.data.temp_bot = bot_xml; obj.data.stash('temp_bot');
                                 JSAN.use('util.window'); var win = new util.window();
@@ -756,7 +790,6 @@ patron.holds.prototype = {
                                 var bot_xml = '<hbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" flex="1" style="overflow: vertical">';
                                 bot_xml += '<spacer flex="1"/><button label="'+$("patronStrings").getString('staff.patron.holds.holds_edit_email_notify.btn_cancel.label')+'"';
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_edit_email_notify.btn_cancel.accesskey')+'" name="fancy_cancel"/></hbox>';
-                                netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect UniversalBrowserWrite');
                                 //obj.data.temp_mid = xml; obj.data.stash('temp_mid');
                                 //obj.data.temp_bot = bot_xml; obj.data.stash('temp_bot');
                                 JSAN.use('util.window'); var win = new util.window();
@@ -816,7 +849,6 @@ patron.holds.prototype = {
                                 var bot_xml = '<hbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" flex="1" style="overflow: vertical">';
                                 bot_xml += '<spacer flex="1"/><button label="'+$("patronStrings").getString('staff.patron.holds.holds_cut_in_line.btn_cancel.label')+'"';
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_cut_in_line.btn_cancel.accesskey')+'" name="fancy_cancel"/></hbox>';
-                                netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect UniversalBrowserWrite');
                                 JSAN.use('util.window'); var win = new util.window();
                                 var fancy_prompt_data = win.open(
                                     urls.XUL_FANCY_PROMPT,
@@ -871,7 +903,6 @@ patron.holds.prototype = {
                                 var bot_xml = '<hbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" flex="1" style="overflow: vertical">';
                                 bot_xml += '<spacer flex="1"/><button label="'+$("patronStrings").getString('staff.patron.holds.holds_desire_mint_condition.btn_cancel.label')+'"';
                                 bot_xml += ' accesskey="'+$("patronStrings").getString('staff.patron.holds.holds_desire_mint_condition.btn_cancel.accesskey')+'" name="fancy_cancel"/></hbox>';
-                                netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect UniversalBrowserWrite');
                                 JSAN.use('util.window'); var win = new util.window();
                                 var fancy_prompt_data = win.open(
                                     urls.XUL_FANCY_PROMPT,
@@ -1189,7 +1220,6 @@ patron.holds.prototype = {
                                     msg = $("patronStrings").getFormattedString('staff.patron.holds.holds_cancel.cancel_hold_message.singular', [hold_list.join(', ')]);
                                 }
 
-                                netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
                                 JSAN.use('util.window');
                                 var win = new util.window();
                                 var my_xulG = win.open(
@@ -1297,22 +1327,22 @@ patron.holds.prototype = {
                                     var opac_url;
                                     switch(htype) {
                                         case 'M' :
-                                            opac_url = xulG.url_prefix( urls.opac_rresult_metarecord ) + htarget;
+                                            opac_url = xulG.url_prefix('opac_rresult_metarecord') + htarget;
                                         break;
                                         case 'T' :
-                                            opac_url = xulG.url_prefix( urls.opac_rdetail ) + htarget;
+                                            opac_url = xulG.url_prefix('opac_rdetail') + htarget;
                                         break;
                                         case 'P' :
-                                            opac_url = xulG.url_prefix( urls.opac_rdetail )
+                                            opac_url = xulG.url_prefix('opac_rdetail')
                                             + obj.hold_part_map[ obj.retrieve_ids[i].id ].record();
                                         break;
                                         case 'I' :
-                                            opac_url = xulG.url_prefix( urls.opac_rdetail )
+                                            opac_url = xulG.url_prefix('opac_rdetail')
                                             + obj.hold_subscription_map[ obj.retrieve_ids[i].id ].record_entry();
                                         break;
                                         case 'V' :
                                             var my_acn = obj.network.simple_request( 'FM_ACN_RETRIEVE.authoritative', [ htarget ]);
-                                            opac_url = xulG.url_prefix( urls.opac_rdetail) + my_acn.record();
+                                            opac_url = xulG.url_prefix('opac_rdetail') + my_acn.record();
                                         break;
                                         case 'C' :
                                         case 'R' :
@@ -1325,7 +1355,7 @@ patron.holds.prototype = {
                                                 my_acn = obj.network.simple_request( 'FM_ACN_RETRIEVE.authoritative',
                                                     [ my_acp.call_number() ]);
                                             }
-                                            opac_url = xulG.url_prefix( urls.opac_rdetail) + my_acn.record();
+                                            opac_url = xulG.url_prefix('opac_rdetail') + my_acn.record();
                                         break;
                                         default:
                                             obj.error.standard_unexpected_error_alert($("patronStrings").getFormattedString('staff.patron.holds.show_catalog.unknown_htype', [htype]), obj.retrieve_ids[i]);
@@ -1338,7 +1368,7 @@ patron.holds.prototype = {
                                         'opac_url' : opac_url
                                     };
                                     xulG.new_tab(
-                                        xulG.url_prefix(urls.XUL_OPAC_WRAPPER),
+                                        xulG.url_prefix('XUL_OPAC_WRAPPER'),
                                         {'tab_name': htype == 'M' ? 'Catalog' : $("patronStrings").getString('staff.patron.holds.show_catalog.retrieving_title') },
                                         content_params
                                     );
@@ -1427,14 +1457,13 @@ patron.holds.prototype = {
                         function(ev) {
                             try {
                                 var content_params = {
-                                    'show_nav_buttons' : false,
+                                    'show_nav_buttons' : true,
                                     'show_print_button' : true,
                                     'passthru_content_params' : {
                                         'authtoken' : ses(),
                                         'authtime' : ses('authtime'),
                                         'window_open' : function(a,b,c) {
                                             try {
-                                                netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect UniversalBrowserWrite');
                                                 return window.open(a,b,c);
                                             } catch(E) {
                                                 obj.error.standard_unexpected_error_alert('window_open',E);
@@ -1442,11 +1471,12 @@ patron.holds.prototype = {
                                         },
                                         'opac_hold_placed' : function(hold) {
                                             try {
+                                                var hold_id = typeof hold == 'object' ? hold.id() : hold;
                                                 obj.list.append(
                                                     {
                                                         'row' : {
                                                             'my' : {
-                                                                'hold_id' : typeof hold == 'object' ? hold.id() : hold
+                                                                'hold_id' : hold_id
                                                             }
                                                         }
                                                     }
@@ -1454,6 +1484,30 @@ patron.holds.prototype = {
                                                 if (window.xulG && typeof window.xulG.on_list_change == 'function') {
                                                     window.xulG.on_list_change(); 
                                                 }
+                                                obj.list.wrap_in_full_retrieve(
+                                                    function() {
+                                                        try {
+                                                            obj.error.work_log(
+                                                                $('offlineStrings').getFormattedString(
+                                                                    'staff.circ.work_log_hold_placed.message',
+                                                                    [
+                                                                        ses('staff_usrname'),
+                                                                        obj.holds_map[ hold_id ].patron_last,
+                                                                        obj.holds_map[ hold_id ].patron_barcode,
+                                                                        hold_id,
+                                                                        obj.holds_map[ hold_id ].hold.hold_type()
+                                                                    ]
+                                                                ), {
+                                                                    'au_id' : obj.holds_map[ hold_id ].hold.usr(),
+                                                                    'au_family_name' : obj.holds_map[ hold_id ].patron_family_name,
+                                                                    'au_barcode' : obj.holds_map[ hold_id ].patron_barcode
+                                                                }
+                                                            );
+                                                        } catch(F) {
+                                                            obj.error.standard_unexpected_error_alert('holds.js, opac_hold_placed(), work_log: ',F);
+                                                        }
+                                                    }
+                                                );
                                             } catch(E) {
                                                 obj.error.standard_unexpected_error_alert('holds.js, opac_hold_placed(): ',E);
                                             }
@@ -1463,7 +1517,7 @@ patron.holds.prototype = {
                                         'patron_barcode' : obj.patron_barcode
                                     },
                                     'url_prefix' : xulG.url_prefix,
-                                    'url' : xulG.url_prefix(urls.browser)
+                                    'url' : xulG.url_prefix('browser')
                                 };
                                 xulG.display_window.g.patron.right_deck.set_iframe( urls.XUL_REMOTE_BROWSER + '?patron_hold=1', {}, content_params);
                             } catch(E) {
@@ -1486,6 +1540,7 @@ patron.holds.prototype = {
         var x_expired_checkbox = document.getElementById('expired_checkbox');
         var x_print_full_pull_list = document.getElementById('print_full_btn');
         var x_print_full_pull_list_alt = document.getElementById('print_alt_btn');
+        var x_simplified_pull_list = document.getElementById('simplified_pull_list_btn');
         switch(obj.hold_interface_type) {
             case 'shelf':
                 obj.render_lib_menus({'pickup_lib':true});
@@ -1494,6 +1549,7 @@ patron.holds.prototype = {
                 if (x_lib_menu_placeholder) x_lib_menu_placeholder.hidden = false;
                 if (x_clear_shelf_widgets) x_clear_shelf_widgets.hidden = false;
                 if (x_print_full_pull_list_alt) x_print_full_pull_list_alt.hidden = true;
+                if (x_simplified_pull_list) x_simplified_pull_list.hidden = true;
             break;
             case 'pull' :
                 if (x_fetch_more) x_fetch_more.hidden = false;
@@ -1501,6 +1557,7 @@ patron.holds.prototype = {
                 if (x_print_full_pull_list_alt) x_print_full_pull_list_alt.hidden = false;
                 if (x_lib_type_menu) x_lib_type_menu.hidden = true;
                 if (x_lib_menu_placeholder) x_lib_menu_placeholder.hidden = true;
+                if (x_simplified_pull_list) x_simplified_pull_list.hidden = false;
             break;
             case 'record' :
                 obj.render_lib_menus({'pickup_lib':true,'request_lib':true});
@@ -1508,6 +1565,7 @@ patron.holds.prototype = {
                 if (x_lib_type_menu) x_lib_type_menu.hidden = false;
                 if (x_print_full_pull_list_alt) x_print_full_pull_list_alt.hidden = true;
                 if (x_lib_menu_placeholder) x_lib_menu_placeholder.hidden = false;
+                if (x_simplified_pull_list) x_simplified_pull_list.hidden = true;
             break;
             default:
                 if (obj.controller.view.cmd_search_opac) obj.controller.view.cmd_search_opac.setAttribute('hidden', false);
@@ -1516,6 +1574,7 @@ patron.holds.prototype = {
                 if (x_lib_menu_placeholder) x_lib_menu_placeholder.hidden = true;
                 if (x_show_cancelled_deck) x_show_cancelled_deck.hidden = false;
                 if (x_print_full_pull_list_alt) x_print_full_pull_list_alt.hidden = true;
+                if (x_simplified_pull_list) x_simplified_pull_list.hidden = true;
             break;
         }
         setTimeout( // We do this because render_lib_menus above creates and appends a DOM node, but until this thread exits, it doesn't really happen
@@ -1525,7 +1584,15 @@ patron.holds.prototype = {
                     if (obj.controller.view.lib_menu) obj.controller.view.lib_menu.disabled = true;
                 }
                 obj.controller.render();
-                obj.retrieve(true);
+                if (params['clear']) {
+                    JSAN.use('util.widgets');
+                    var x = document.getElementById('expired_checkbox');
+                    x.checked = true;
+                    obj.expired = true;
+                    util.widgets.dispatch('command','cmd_clear_expired_onshelf_holds');
+                } else {
+                    obj.retrieve(true);
+                }
 
                 obj.controller.view.cmd_retrieve_patron.setAttribute('disabled','true');
                 obj.controller.view.cmd_holds_edit_pickup_lib.setAttribute('disabled','true');
@@ -1551,7 +1618,6 @@ patron.holds.prototype = {
             }
             dump('hold details UI ready\n');
         }
-        netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
         JSAN.use('util.browser');
         obj.browser = new util.browser();
         obj.browser.init(

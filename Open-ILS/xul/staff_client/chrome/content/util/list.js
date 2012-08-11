@@ -407,7 +407,6 @@ util.list.prototype = {
                 var col_ordinal = col.getAttribute('ordinal'); 
                 my_cols[ col_id ] = { 'hidden' : col_hidden, 'width' : col_width, 'ordinal' : col_ordinal };
             }
-            netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
             JSAN.use('util.file'); var file = new util.file('tree_columns_for_'+window.escape(id));
             file.set_object(my_cols);
             file.close();
@@ -438,7 +437,6 @@ util.list.prototype = {
             var my_cols;
             if (! obj.data.hash.aous) { obj.data.hash.aous = {}; }
             if (! obj.data.hash.aous['gui.disable_local_save_columns']) {
-                netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
                 JSAN.use('util.file'); var file = new util.file('tree_columns_for_'+window.escape(id));
                 if (file._file.exists()) {
                     my_cols = file.get_object(); file.close();
@@ -1075,7 +1073,7 @@ util.list.prototype = {
                                 dump('exec_on_all_fleshed, processing on_all_fleshed array, length = ' + obj.on_all_fleshed.length + '\n');
                                 var f = obj.on_all_fleshed.pop();
                                 if (typeof f == 'function') { 
-                                    try { f(); } catch(E) { obj.error.standard_unexpected_error_alert('_full_retrieve_tree callback',f); } 
+                                    try { f(); } catch(E) { obj.error.standard_unexpected_error_alert('_full_retrieve_tree callback',E); }
                                 }
                                 if (obj.on_all_fleshed.length > 0) arguments.callee(); 
                             } catch(E) {

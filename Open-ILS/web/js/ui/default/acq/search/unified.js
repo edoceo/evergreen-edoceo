@@ -4,6 +4,7 @@ dojo.require("openils.widget.AutoGrid");
 dojo.require("openils.widget.AutoWidget");
 dojo.require("openils.widget.XULTermLoader");
 dojo.require("openils.PermaCrud");
+dojo.require('dijit.layout.TabContainer');
 
 if (!localeStrings) {   /* we can do this because javascript doesn't have block 
                            scope */
@@ -128,6 +129,8 @@ function TermSelectorFactory(terms) {
         ) {
             var term = this.getTerm();
             var widgetKey = this.uniq;
+            var target = termManager.getLinkTarget(term);
+
             if (matchHow.getValue() == "__in") {
                 new openils.widget.XULTermLoader({
                     "parentNode": parentNode
@@ -147,7 +150,9 @@ function TermSelectorFactory(terms) {
                     }
                 );
             } else if (term.hint == "acqlia" ||
-                (term.hint == "jub" && term.field == "eg_bib_id")) {
+                (term.hint == "jub" && term.field == "eg_bib_id") ||
+                term.datatype == "org_unit" ||
+                (term.datatype == "link" && target == "au")) {
                 /* The test for jub.eg_bib_id is a special case to prevent
                  * AutoFieldWidget from trying to render a ridiculous dropdown
                  * of every bib record ID in the system. */
@@ -160,6 +165,16 @@ function TermSelectorFactory(terms) {
                     wStore[widgetKey].focus();
                 if (typeof(callback) == "function")
                     callback(term, widgetKey);
+
+                // submit on enter
+                dojo.connect(wStore[widgetKey], 'onkeyup',
+                    function(e) {
+                        if(e.keyCode == dojo.keys.ENTER) {
+                            resultManager.go(termManager.buildSearchObject());
+                        }
+                    }
+                );
+
             } else {
                 new openils.widget.AutoFieldWidget({
                     "fmClass": term.hint,
@@ -181,9 +196,11 @@ function TermSelectorFactory(terms) {
                             callback(term, widgetKey);
 
                         // submit on enter
-                        openils.Util.registerEnterHandler(w.domNode,
-                            function() { 
-                                resultManager.go(termManager.buildSearchObject());
+                        dojo.connect(w.domNode, 'onkeyup',
+                            function(e) {
+                                if(e.keyCode == dojo.keys.ENTER) {
+                                    resultManager.go(termManager.buildSearchObject());
+                                }
                             }
                         );
                     }
@@ -247,7 +264,7 @@ function TermManager() {
     };
 
     this.terms = {};
-    ["jub", "acqpl", "acqpo", "acqinv"].forEach(
+    ["jub", "acqpl", "acqpo", "acqinv", "acqlid"].forEach(
         function(hint) {
             var o = {};
             o.__label = fieldmapper.IDL.fmclasses[hint].label;
@@ -617,84 +634,91 @@ function ResultManager(liPager, poGrid, plGrid, invGrid) {
     this.plCache = {};
     this.invCache = {};
 
-    this.result_types = {
-        "lineitem": {
-            "search_options": {
-                "flesh_attrs": true,
-                "flesh_cancel_reason": true,
-                "flesh_notes": true
+    if (window.unifiedSearchExternalMode) {
+
+        // external user will define result types and handlers
+
+    } else {
+
+        this.result_types = {
+            "lineitem": {
+                "search_options": {
+                    "flesh_attrs": true,
+                    "flesh_cancel_reason": true,
+                    "flesh_notes": true
+                },
+                "revealer": function() {
+                    self.liPager.show();
+                    progressDialog.show(true);
+                },
+                "finisher": function() {
+                    self.liPager.batch_length = self.count_results;
+                    self.liPager.relabelControls();
+                    self.liPager.enableControls(true);
+                    progressDialog.hide();
+                },
+                "adder": function(li) {
+                    self.liPager.liTable.addLineitem(li);
+                },
+                "interface": self.liPager
             },
-            "revealer": function() {
-                self.liPager.show();
-                progressDialog.show(true);
+            "purchase_order": {
+                "search_options": {
+                    "no_flesh_cancel_reason": true
+                },
+                "revealer": function() {
+                    self.poGrid.resetStore();
+                    self.poGrid.showLoadProgressIndicator();
+                    self.poCache = {};
+                },
+                "finisher": function() {
+                    self.poGrid.hideLoadProgressIndicator();
+                },
+                "adder": function(po) {
+                    self.poCache[po.id()] = po;
+                    self.poGrid.store.newItem(acqpo.toStoreItem(po));
+                },
+                "interface": self.poGrid
             },
-            "finisher": function() {
-                self.liPager.batch_length = self.count_results;
-                self.liPager.relabelControls();
-                self.liPager.enableControls(true);
-                progressDialog.hide();
+            "picklist": {
+                "search_options": {
+                    "flesh_lineitem_count": true,
+                    "flesh_owner": true
+                },
+                "revealer": function() {
+                    self.plGrid.resetStore();
+                    self.plGrid.showLoadProgressIndicator();
+                    self.plCache = {};
+                },
+                "finisher": function() {
+                    self.plGrid.hideLoadProgressIndicator();
+                },
+                "adder": function(pl) {
+                    self.plCache[pl.id()] = pl;
+                    self.plGrid.store.newItem(acqpl.toStoreItem(pl));
+                },
+                "interface": self.plGrid
             },
-            "adder": function(li) {
-                self.liPager.liTable.addLineitem(li);
+            "invoice": {
+                "search_options": {
+                    "no_flesh_misc": true
+                },
+                "finisher": function() {
+                    self.invGrid.hideLoadProgressIndicator();
+                },
+                "revealer": function() {
+                    self.invGrid.resetStore();
+                    self.invCache = {};
+                },
+                "adder": function(inv) {
+                    self.invCache[inv.id()] = inv;
+                    self.invGrid.store.newItem(acqinv.toStoreItem(inv));
+                },
+                "interface": self.invGrid
             },
-            "interface": self.liPager
-        },
-        "purchase_order": {
-            "search_options": {
-                "no_flesh_cancel_reason": true
-            },
-            "revealer": function() {
-                self.poGrid.resetStore();
-                self.poGrid.showLoadProgressIndicator();
-                self.poCache = {};
-            },
-            "finisher": function() {
-                self.poGrid.hideLoadProgressIndicator();
-            },
-            "adder": function(po) {
-                self.poCache[po.id()] = po;
-                self.poGrid.store.newItem(acqpo.toStoreItem(po));
-            },
-            "interface": self.poGrid
-        },
-        "picklist": {
-            "search_options": {
-                "flesh_lineitem_count": true,
-                "flesh_owner": true
-            },
-            "revealer": function() {
-                self.plGrid.resetStore();
-                self.plGrid.showLoadProgressIndicator();
-                self.plCache = {};
-            },
-            "finisher": function() {
-                self.plGrid.hideLoadProgressIndicator();
-            },
-            "adder": function(pl) {
-                self.plCache[pl.id()] = pl;
-                self.plGrid.store.newItem(acqpl.toStoreItem(pl));
-            },
-            "interface": self.plGrid
-        },
-        "invoice": {
-            "search_options": {
-                "no_flesh_misc": true
-            },
-            "finisher": function() {
-                self.invGrid.hideLoadProgressIndicator();
-            },
-            "revealer": function() {
-                self.invGrid.resetStore();
-                self.invCache = {};
-            },
-            "adder": function(inv) {
-                self.invCache[inv.id()] = inv;
-                self.invGrid.store.newItem(acqinv.toStoreItem(inv));
-            },
-            "interface": self.invGrid
-        },
-        "no_results": {
-            "revealer": function() { alert(localeStrings.NO_RESULTS); }
+            "no_results": {
+                "revealer": function() { alert(localeStrings.NO_RESULTS); }
+            }
         }
     };
 
@@ -771,16 +795,36 @@ function ResultManager(liPager, poGrid, plGrid, invGrid) {
     };
 
     this.resultsComplete = function() {
+
+        // now that the records are loaded, we need to do the actual focusing
+        if (this.result_type == 'lineitem') {
+            if (this.liPager) 
+                this.liPager.focusLi();
+        }
+
         if (!this.count_results)
             this.show("no_results");
         else this.finish(this.result_type);
     };
 
     this.go = function(search_object) {
+
+        if (window.unifiedSearchExternalMode) {
+            // assume for now that external mode implies inline results display
+            
+            uriManager = uriManager || new URIManager();
+            uriManager.search_object = search_object;
+            uriManager.result_type = dojo.byId("acq-unified-result-type").getValue();
+            uriManager.conjunction = dojo.byId("acq-unified-conjunction").getValue();
+            this.search(uriManager, termManager);
+
+        } else {
+
         location.href = oilsBasePath + "/acq/search/unified?" +
             "so=" + base64Encode(search_object) +
             "&rt=" + dojo.byId("acq-unified-result-type").getValue() +
             "&c=" + dojo.byId("acq-unified-conjunction").getValue();
+        }
     };
 
     this.search = function(uriManager, termManager) {
@@ -832,6 +876,15 @@ function ResultManager(liPager, poGrid, plGrid, invGrid) {
                     }
                 }
             );
+        }
+
+        // if the caller has requested we focus on a specific
+        // lineitem, allow the pager to find the lineitem
+        // and load the results directly.
+        if (this.result_type == 'lineitem') {
+            if (this.liPager && this.liPager.loadFocusLi()) { 
+                return;
+            }
         }
 
         interface.dataLoader();
@@ -908,7 +961,12 @@ function URIManager() {
 /* onload */
 openils.Util.addOnLoad(
     function() {
+
+        // onload handled by external user
+        if (window.unifiedSearchExternalMode) return;
+
         termManager = new TermManager();
+
         resultManager = new ResultManager(
             new LiTablePager(null, new AcqLiTable()),
             dijit.byId("acq-unified-po-grid"),

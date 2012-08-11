@@ -274,7 +274,7 @@ sub promote_lineitem_holds {
             $hold->target( $li->eg_bib_id );
         }
 
-        $mgr->editor->create_actor_hold_request( $hold ) or return 0;
+        $mgr->editor->create_action_hold_request( $hold ) or return 0;
     }
 
     return $li;
@@ -760,7 +760,8 @@ sub set_lineitem_attr {
 # Lineitem Debits
 # ----------------------------------------------------------------------------
 sub create_lineitem_debits {
-    my ($mgr, $li, $dry_run) = @_; 
+    my ($mgr, $li, $dry_run, $options) = @_; 
+    $options ||= {};
 
     unless($li->estimated_unit_price) {
         $mgr->editor->event(OpenILS::Event->new('ACQ_LINEITEM_NO_PRICE', payload => $li->id));
@@ -778,6 +779,12 @@ sub create_lineitem_debits {
         {lineitem => $li->id}, 
         {idlist=>1}
     );
+
+    if (@$lid_ids == 0 and !$options->{zero_copy_activate}) {
+        $mgr->editor->event(OpenILS::Event->new('ACQ_LINEITEM_NO_COPIES', payload => $li->id));
+        $mgr->editor->rollback;
+        return 0;
+    }
 
     for my $lid_id (@$lid_ids) {
 
@@ -1410,6 +1417,11 @@ sub upload_records {
         $mgr->respond;
 	}
 
+    if ($po) {
+        $evt = extract_po_name($mgr, $po, \@li_list);
+        return $evt if $evt;
+    }
+
 	$e->commit;
     unlink($filename);
     $cache->delete_cache('vandelay_import_spool_' . $key);
@@ -1425,6 +1437,44 @@ sub upload_records {
     }
 
     return $mgr->respond_complete;
+}
+
+# see if the PO name is encoded in the newly imported records
+sub extract_po_name {
+    my ($mgr, $po, $li_ids) = @_;
+    my $e = $mgr->editor;
+
+    # find the first instance of the name
+    my $attr = $e->search_acq_lineitem_attr([
+        {   lineitem => $li_ids,
+            attr_type => 'lineitem_provider_attr_definition',
+            attr_name => 'purchase_order'
+        }, {
+            order_by => {aqlia => 'id'},
+            limit => 1
+        }
+    ])->[0] or return undef;
+
+    my $name = $attr->attr_value;
+
+    # see if another PO already has the name, provider, and org
+    my $existing = $e->search_acq_purchase_order(
+        {   name => $name,
+            ordering_agency => $po->ordering_agency,
+            provider => $po->provider
+        },
+        {idlist => 1}
+    )->[0];
+
+    # if a PO exists with the same name (and provider/org)
+    # tack the po ID into the name to differentiate
+    $name = sprintf("$name (%s)", $po->id) if $existing;
+
+    $logger->info("Extracted PO name: $name");
+
+    $po->name($name);
+    update_purchase_order($mgr, $po) or return $e->die_event;
+    return undef;
 }
 
 sub import_lineitem_details {
@@ -2305,13 +2355,14 @@ __PACKAGE__->register_method(
 );
 
 sub activate_purchase_order {
-    my($self, $conn, $auth, $po_id, $vandelay) = @_;
+    my($self, $conn, $auth, $po_id, $vandelay, $options) = @_;
+    $options ||= {};
 
     my $dry_run = ($self->api_name =~ /\.dry_run/) ? 1 : 0;
     my $e = new_editor(authtoken=>$auth);
     return $e->die_event unless $e->checkauth;
     my $mgr = OpenILS::Application::Acq::BatchManager->new(editor => $e, conn => $conn);
-    my $die_event = activate_purchase_order_impl($mgr, $po_id, $vandelay, $dry_run);
+    my $die_event = activate_purchase_order_impl($mgr, $po_id, $vandelay, $dry_run, $options);
     return $e->die_event if $die_event;
     $conn->respond_complete(1);
     $mgr->run_post_response_hooks unless $dry_run;
@@ -2320,7 +2371,7 @@ sub activate_purchase_order {
 
 # xacts managed within
 sub activate_purchase_order_impl {
-    my ($mgr, $po_id, $vandelay, $dry_run) = @_;
+    my ($mgr, $po_id, $vandelay, $dry_run, $options) = @_;
 
     # read-only until lineitem asset creation
     my $e = $mgr->editor;
@@ -2328,6 +2379,10 @@ sub activate_purchase_order_impl {
 
     my $po = $e->retrieve_acq_purchase_order($po_id) or return $e->die_event;
     return $e->die_event unless $e->allowed('CREATE_PURCHASE_ORDER', $po->ordering_agency);
+
+    return $e->die_event(OpenILS::Event->new('PO_ALREADY_ACTIVATED'))
+        if $po->order_date; # PO cannot be re-activated
+
     my $provider = $e->retrieve_acq_provider($po->provider);
 
     # find lineitems and create assets for all
@@ -2362,7 +2417,7 @@ sub activate_purchase_order_impl {
         $li->state('on-order');
         $li->claim_policy($provider->default_claim_policy)
             if $provider->default_claim_policy and !$li->claim_policy;
-        create_lineitem_debits($mgr, $li, $dry_run) or return $e->die_event;
+        create_lineitem_debits($mgr, $li, $dry_run, $options) or return $e->die_event;
         update_lineitem($mgr, $li) or return $e->die_event;
         $mgr->post_process( sub { create_lineitem_status_events($mgr, $li->id, 'aur.ordered'); });
         $mgr->respond;
@@ -3377,6 +3432,45 @@ sub add_li_to_po {
     $e->commit;
     return {success => 1};
 }
+
+__PACKAGE__->register_method(
+    method => 'po_lineitems_no_copies',
+    api_name => 'open-ils.acq.purchase_order.no_copy_lineitems.id_list',
+    stream => 1,
+    authoritative => 1, 
+    signature => {
+        desc => q/Returns the set of lineitem IDs for a given PO that have no copies attached/,
+        params => [
+            {desc => 'Authentication token', type => 'string'},
+            {desc => 'The purchase order id', type => 'number'},
+        ],
+        return => {desc => 'Stream of lineitem IDs on success, event on error'}
+    }
+);
+
+sub po_lineitems_no_copies {
+    my ($self, $conn, $auth, $po_id) = @_;
+
+    my $e = new_editor(authtoken => $auth);
+    return $e->event unless $e->checkauth;
+
+    # first check the view perms for LI's attached to this PO
+    my $po = $e->retrieve_acq_purchase_order($po_id) or return $e->event;
+    return $e->event unless $e->allowed('VIEW_PURCHASE_ORDER', $po->ordering_agency);
+
+    my $ids = $e->json_query({
+        select => {jub => ['id']},
+        from => {jub => {acqlid => {type => 'left'}}},
+        where => {
+            '+jub' => {purchase_order => $po_id},
+            '+acqlid' => {lineitem => undef}
+        }
+    });
+
+    $conn->respond($_->{id}) for @$ids;
+    return undef;
+}
+
 
 1;
 

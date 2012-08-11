@@ -108,12 +108,12 @@ sub load_myopac_prefs {
     my $user = $self->ctx->{user};
 
     my $lock_usernames = $self->ctx->{get_org_setting}->($e->requestor->home_ou, 'opac.lock_usernames');
-    if($lock_usernames == 1) {
+    if(defined($lock_usernames) and $lock_usernames == 1) {
         # Policy says no username changes
         $self->ctx->{username_change_disallowed} = 1;
     } else {
         my $username_unlimit = $self->ctx->{get_org_setting}->($e->requestor->home_ou, 'opac.unlimit_usernames');
-        if($username_unlimit != 1) {
+        if(!$username_unlimit) {
             my $regex_check = $self->ctx->{get_org_setting}->($e->requestor->home_ou, 'opac.barcode_regex');
             if(!$regex_check) {
                 # Default is "starts with a number"
@@ -257,6 +257,48 @@ sub fetch_optin_prefs {
     return [map { {cust => $_, value => $user_set->{$_->name} } } @$opt_ins];
 }
 
+sub _load_lists_and_settings {
+    my $self = shift;
+    my $e = $self->editor;
+    my $stat = $self->_load_user_with_prefs;
+    unless ($stat) {
+        my $exclude = 0;
+        my $setting_map = $self->ctx->{user_setting_map};
+        $exclude = $$setting_map{'opac.default_list'} if ($$setting_map{'opac.default_list'});
+        $self->ctx->{bookbags} = $e->search_container_biblio_record_entry_bucket(
+            [
+                {owner => $self->ctx->{user}->id, btype => 'bookbag', id => {'<>' => $exclude}}, {
+                    order_by => {cbreb => 'name'},
+                    limit => $self->cgi->param('limit') || 10,
+                    offset => $self->cgi->param('offset') || 0
+                }
+            ]
+        );
+        # We also want a total count of the user's bookbags.
+        my $q = {
+            'select' => { 'cbreb' => [ { 'column' => 'id', 'transform' => 'count', 'aggregate' => 'true', 'alias' => 'count' } ] },
+            'from' => 'cbreb',
+            'where' => { 'btype' => 'bookbag', 'owner' => $self->ctx->{user}->id }
+        };
+        my $r = $e->json_query($q);
+        $self->ctx->{bookbag_count} = $r->[0]->{'count'};
+        # Someone has requested that we use the default list's name
+        # rather than "Default List."
+        if ($exclude) {
+            $q = {
+                'select' => {'cbreb' => ['name']},
+                'from' => 'cbreb',
+                'where' => {'id' => $exclude}
+            };
+            $r = $e->json_query($q);
+            $self->ctx->{default_bookbag} = $r->[0]->{'name'};
+        }
+    } else {
+        return $stat;
+    }
+    return undef;
+}
+
 sub update_optin_prefs {
     my $self = shift;
     my $user_prefs = shift;
@@ -351,6 +393,7 @@ sub load_myopac_prefs_settings {
         opac.hits_per_page
         opac.default_search_location
         opac.default_pickup_location
+        opac.temporary_list_no_warn
     /;
 
     my $stat = $self->_load_user_with_prefs;
@@ -810,6 +853,8 @@ sub load_place_hold {
             }
         }
 
+        $self->apache->log->warn("$#parts : @t_holds");
+
         $self->attempt_hold_placement($usr, $pickup_lib, 'P', @p_holds) if @p_holds;
         $self->attempt_hold_placement($usr, $pickup_lib, 'T', @t_holds) if @t_holds;
 
@@ -852,7 +897,15 @@ sub attempt_hold_placement {
     }
 
     my $method = 'open-ils.circ.holds.test_and_create.batch';
-    $method .= '.override' if $cgi->param('override');
+
+    if ($cgi->param('override')) {
+        $method .= '.override';
+
+    } elsif (!$ctx->{is_staff})  {
+
+        $method .= '.override' if $self->ctx->{get_org_setting}->(
+            $e->requestor->home_ou, "opac.patron.auto_overide_hold_events");
+    }
 
     my @create_targets = map {$_->{target_id}} (grep { !$_->{hold_failed} } @hold_data);
 
@@ -1428,7 +1481,12 @@ sub load_myopac_main {
     my $limit = $self->cgi->param('limit') || 0;
     my $offset = $self->cgi->param('offset') || 0;
     $self->ctx->{search_ou} = $self->_get_search_lib();
-
+    $self->ctx->{user}->notes(
+        $self->editor->search_actor_usr_note({
+            usr => $self->ctx->{user}->id,
+            pub => 't'
+        })
+    );
     return $self->prepare_fines($limit, $offset) || Apache2::Const::OK;
 }
 
@@ -1482,14 +1540,14 @@ sub load_myopac_update_username {
     my $allow_change = 1;
     my $regex_check;
     my $lock_usernames = $self->ctx->{get_org_setting}->($e->requestor->home_ou, 'opac.lock_usernames');
-    if($lock_usernames == 1) {
+    if(defined($lock_usernames) and $lock_usernames == 1) {
         # Policy says no username changes
         $allow_change = 0;
     } else {
         # We want this further down.
         $regex_check = $self->ctx->{get_org_setting}->($e->requestor->home_ou, 'opac.barcode_regex');
         my $username_unlimit = $self->ctx->{get_org_setting}->($e->requestor->home_ou, 'opac.unlimit_usernames');
-        if($username_unlimit != 1) {
+        if(!$username_unlimit) {
             if(!$regex_check) {
                 # Default is "starts with a number"
                 $regex_check = '^\d+';
@@ -1612,6 +1670,11 @@ sub load_myopac_bookbags {
     my $self = shift;
     my $e = $self->editor;
     my $ctx = $self->ctx;
+    my $limit = $self->cgi->param('limit') || 10;
+    my $offset = $self->cgi->param('offset') || 0;
+
+    $ctx->{bookbags_limit} = $limit;
+    $ctx->{bookbags_offset} = $offset;
 
     my ($sorter, $modifier) = $self->_get_bookbag_sort_params("sort");
     $e->xact_begin; # replication...
@@ -1626,8 +1689,8 @@ sub load_myopac_bookbags {
         [
             {owner => $e->requestor->id, btype => 'bookbag'}, {
                 order_by => {cbreb => 'name'},
-                limit => $self->cgi->param('limit') || 10,
-                offset => $self->cgi->param('offset') || 0
+                limit => $limit,
+                offset => $offset
             }
         ],
         {substream => 1}
@@ -1637,56 +1700,80 @@ sub load_myopac_bookbags {
         $e->rollback;
         return Apache2::Const::HTTP_INTERNAL_SERVER_ERROR;
     }
-    
+
+    # We load the user prefs to get their default bookbag.
+    $self->_load_user_with_prefs;
+
+    # We also want a total count of the user's bookbags.
+    my $q = {
+        'select' => { 'cbreb' => [ { 'column' => 'id', 'transform' => 'count', 'aggregate' => 'true', 'alias' => 'count' } ] },
+        'from' => 'cbreb',
+        'where' => { 'btype' => 'bookbag', 'owner' => $self->ctx->{user}->id }
+    };
+    my $r = $e->json_query($q);
+    $ctx->{bookbag_count} = $r->[0]->{'count'};
+
     # If the user wants a specific bookbag's items, load them.
     # XXX add bookbag item paging support
 
-    if ($self->cgi->param("id")) {
+    if ($self->cgi->param("bbid")) {
         my ($bookbag) =
-            grep { $_->id eq $self->cgi->param("id") } @{$ctx->{bookbags}};
+            grep { $_->id eq $self->cgi->param("bbid") } @{$ctx->{bookbags}};
 
-        if (!$bookbag) {
-            $e->rollback;
-            return Apache2::Const::HTTP_INTERNAL_SERVER_ERROR;
-        }
+        if ($bookbag) {
+            if ( ($self->cgi->param("action") || '') eq "editmeta") {
+                if (!$self->_update_bookbag_metadata($bookbag))  {
+                    $e->rollback;
+                    return Apache2::Const::HTTP_INTERNAL_SERVER_ERROR;
+                } else {
+                    $e->commit;
+                    my $url = $self->ctx->{opac_root} . '/myopac/lists?bbid=' .
+                        $bookbag->id;
 
-        if ($self->cgi->param("action") eq "editmeta") {
-            if (!$self->_update_bookbag_metadata($bookbag))  {
-                $e->rollback;
-                return Apache2::Const::HTTP_INTERNAL_SERVER_ERROR;
-            } else {
-                $e->commit;
-                my $url = $self->ctx->{opac_root} . '/myopac/lists?id=' .
-                    $bookbag->id;
-
-                foreach my $param (('loc', 'qtype', 'query', 'sort')) {
-                    if ($self->cgi->param($param)) {
-                        $url .= ";$param=" . uri_escape($self->cgi->param($param));
+                    foreach my $param (('loc', 'qtype', 'query', 'sort', 'offset', 'limit')) {
+                        if ($self->cgi->param($param)) {
+                            $url .= ";$param=" . uri_escape($self->cgi->param($param));
+                        }
                     }
+
+                    return $self->generic_redirect($url);
                 }
-
-                return $self->generic_redirect($url);
             }
+
+            my $query = $self->_prepare_bookbag_container_query(
+                $bookbag->id, $sorter, $modifier
+            );
+
+            # XXX Limiting to 1000 for now.  This way you should be able to see entire
+            # list contents.  Need to add paging here instead.
+            my $args = {
+                "limit" => 1000,
+                "offset" => 0
+            };
+
+            my $items = $U->bib_container_items_via_search($bookbag->id, $query, $args)
+                or return Apache2::Const::HTTP_INTERNAL_SERVER_ERROR;
+
+            my (undef, @recs) = $self->get_records_and_facets(
+                [ map {$_->target_biblio_record_entry->id} @$items ],
+                undef, 
+                {flesh => '{mra}'}
+            );
+
+            $ctx->{bookbags_marc_xml}{$_->{id}} = $_->{marc_xml} for @recs;
+
+            $bookbag->items($items);
         }
+    }
 
-        my $query = $self->_prepare_bookbag_container_query(
-            $bookbag->id, $sorter, $modifier
-        );
-
-        # XXX we need to limit the number of records per bbag; use third arg
-        # of bib_container_items_via_search() i think.
-        my $items = $U->bib_container_items_via_search($bookbag->id, $query)
-            or return Apache2::Const::HTTP_INTERNAL_SERVER_ERROR;
-
-        my (undef, @recs) = $self->get_records_and_facets(
-            [ map {$_->target_biblio_record_entry->id} @$items ],
-            undef, 
-            {flesh => '{mra}'}
-        );
-
-        $ctx->{bookbags_marc_xml}{$_->{id}} = $_->{marc_xml} for @recs;
-
-        $bookbag->items($items);
+    # If we have add_rec, we got here from the "Add to new list"
+    # or "See all" popmenu items.
+    if (my $add_rec = $self->cgi->param('add_rec')) {
+        $self->ctx->{add_rec} = $add_rec;
+        $self->ctx->{where_from} = $self->ctx->{referer};
+        if ( my $anchor = $self->cgi->param('anchor') ) {
+            $self->ctx->{where_from} =~ s/#.*|$/#$anchor/;
+        }
     }
 
     $e->rollback;
@@ -1706,7 +1793,7 @@ sub load_myopac_bookbag_update {
     $action = 'save_notes' if $cgi->param('save_notes');
     $action ||= $cgi->param('action');
 
-    $list_id ||= $cgi->param('list');
+    $list_id ||= $cgi->param('list') || $cgi->param('bbid');
 
     my @add_rec = $cgi->param('add_rec') || $cgi->param('record');
     my @selected_item = $cgi->param('selected_item');
@@ -1735,9 +1822,20 @@ sub load_myopac_bookbag_update {
         $list->owner($e->requestor->id);
         $list->btype('bookbag');
         $list->pub($shared ? 't' : 'f');
-        $success = $U->simplereq('open-ils.actor', 
-            'open-ils.actor.container.create', $e->authtoken, 'biblio', $list)
-
+        $success = $U->simplereq('open-ils.actor',
+            'open-ils.actor.container.create', $e->authtoken, 'biblio', $list);
+        if (ref($success) ne 'HASH' && scalar @add_rec) {
+            $list_id = (ref($success)) ? $success->id : $success;
+            foreach my $add_rec (@add_rec) {
+                my $item = Fieldmapper::container::biblio_record_entry_bucket_item->new;
+                $item->bucket($list_id);
+                $item->target_biblio_record_entry($add_rec);
+                $success = $U->simplereq('open-ils.actor',
+                                         'open-ils.actor.container.item.create', $e->authtoken, 'biblio', $item);
+                last unless $success;
+            }
+            $url = $cgi->param('where_from') if ($success && $cgi->param('where_from'));
+        }
     } elsif($action eq 'place_hold') {
 
         # @hold_recs comes from anon lists redirect; selected_itesm comes from existing buckets
@@ -1771,7 +1869,21 @@ sub load_myopac_bookbag_update {
     if($action eq 'delete') {
         $success = $U->simplereq('open-ils.actor', 
             'open-ils.actor.container.full_delete', $e->authtoken, 'biblio', $list_id);
-
+        if ($success) {
+            # We check to see if we're deleting the user's default list.
+            $self->_load_user_with_prefs;
+            my $settings_map = $self->ctx->{user_setting_map};
+            if ($$settings_map{'opac.default_list'} == $list_id) {
+                # We unset the user's opac.default_list setting.
+                $success = $U->simplereq(
+                    'open-ils.actor',
+                    'open-ils.actor.patron.settings.update',
+                    $e->authtoken,
+                    $e->requestor->id,
+                    { 'opac.default_list' => 0 }
+                );
+            }
+        }
     } elsif($action eq 'show') {
         unless($U->is_true($list->pub)) {
             $list->pub('t');
@@ -1802,8 +1914,15 @@ sub load_myopac_bookbag_update {
                 'open-ils.actor.container.item.create', $e->authtoken, 'biblio', $item);
             last unless $success;
         }
-
-    } elsif($action eq 'del_item') {
+        # Redirect back where we came from if we have an anchor parameter:
+        if ( my $anchor = $cgi->param('anchor') ) {
+            $url = $self->ctx->{referer};
+            $url =~ s/#.*|$/#$anchor/;
+        } elsif ($cgi->param('where_from')) {
+            # Or, if we have a "where_from" parameter.
+            $url = $cgi->param('where_from');
+        }
+    } elsif ($action eq 'del_item') {
         foreach (@selected_item) {
             $success = $U->simplereq(
                 'open-ils.actor',
@@ -1813,7 +1932,23 @@ sub load_myopac_bookbag_update {
         }
     } elsif ($action eq 'save_notes') {
         $success = $self->update_bookbag_item_notes;
-        $url .= "&id=" . uri_escape($cgi->param("id")) if $cgi->param("id");
+        $url .= "&bbid=" . uri_escape($cgi->param("bbid")) if $cgi->param("bbid");
+    } elsif ($action eq 'make_default') {
+        $success = $U->simplereq(
+            'open-ils.actor',
+            'open-ils.actor.patron.settings.update',
+            $e->authtoken,
+            $list->owner,
+            { 'opac.default_list' => $list_id }
+        );
+    } elsif ($action eq 'remove_default') {
+        $success = $U->simplereq(
+            'open-ils.actor',
+            'open-ils.actor.patron.settings.update',
+            $e->authtoken,
+            $list->owner,
+            { 'opac.default_list' => 0 }
+        );
     }
 
     return $self->generic_redirect($url) if $success;

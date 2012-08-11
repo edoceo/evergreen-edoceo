@@ -294,8 +294,8 @@ sub nearest_hold {
 	local $OpenILS::Application::Storage::WRITE = 1;
 
 	my $holdsort = isTrue($fifo) ?
-            "pgt.hold_priority, CASE WHEN h.cut_in_line IS TRUE THEN 0 ELSE 1 END, h.request_time, h.selection_depth DESC, p.prox " :
-            "p.prox, pgt.hold_priority, CASE WHEN h.cut_in_line IS TRUE THEN 0 ELSE 1 END, h.selection_depth DESC, h.request_time ";
+			"pgt.hold_priority, CASE WHEN h.cut_in_line IS TRUE THEN 0 ELSE 1 END, h.request_time, h.selection_depth DESC, p.prox " :
+			"p.prox, pgt.hold_priority, CASE WHEN h.cut_in_line IS TRUE THEN 0 ELSE 1 END, h.selection_depth DESC, h.request_time ";
 
 	my $ids = action::hold_request->db_Main->selectcol_arrayref(<<"	SQL", {}, $here, $cp, $age);
 		SELECT	h.id
@@ -304,12 +304,17 @@ sub nearest_hold {
 		  	JOIN action.hold_copy_map hm ON (hm.hold = h.id)
 		  	JOIN actor.usr au ON (au.id = h.usr)
 		  	JOIN permission.grp_tree pgt ON (au.profile = pgt.id)
+		  	LEFT JOIN actor.usr_standing_penalty ausp
+				ON ( au.id = ausp.usr AND ( ausp.stop_date IS NULL OR ausp.stop_date > NOW() ) )
+		  	LEFT JOIN config.standing_penalty csp
+				ON ( csp.id = ausp.standing_penalty AND csp.block_list LIKE '%CAPTURE%' )
 		  WHERE hm.target_copy = ?
 		  	AND (AGE(NOW(),h.request_time) >= CAST(? AS INTERVAL) OR p.prox = 0)
 			AND h.capture_time IS NULL
 		  	AND h.cancel_time IS NULL
 		  	AND (h.expire_time IS NULL OR h.expire_time > NOW())
-            AND h.frozen IS FALSE
+			AND h.frozen IS FALSE
+		  	AND csp.id IS NULL
 		ORDER BY CASE WHEN h.hold_type IN ('R','F') THEN 0 ELSE 1 END, $holdsort
 		LIMIT $limit
 	SQL
@@ -500,10 +505,15 @@ sub hold_pull_list {
 		  FROM	$h_table h
 		  	JOIN $a_table a ON (h.current_copy = a.id)
 		  	LEFT JOIN $ord_table ord ON (a.location = ord.location AND a.circ_lib = ord.org)
+			LEFT JOIN actor.usr_standing_penalty ausp 
+				ON ( h.usr = ausp.usr AND ( ausp.stop_date IS NULL OR ausp.stop_date > NOW() ) )
+			LEFT JOIN config.standing_penalty csp
+				ON ( csp.id = ausp.standing_penalty AND csp.block_list LIKE '%CAPTURE%' )
 		  WHERE	a.circ_lib = ?
 		  	AND h.capture_time IS NULL
 		  	AND h.cancel_time IS NULL
 		  	AND (h.expire_time IS NULL OR h.expire_time > NOW())
+			AND csp.id IS NULL
 			$status_filter
 		  ORDER BY CASE WHEN ord.position IS NOT NULL THEN ord.position ELSE 999 END, h.request_time
 		  LIMIT $limit
@@ -515,10 +525,15 @@ sub hold_pull_list {
             SELECT    count(*)
               FROM    $h_table h
                   JOIN $a_table a ON (h.current_copy = a.id)
+                  LEFT JOIN actor.usr_standing_penalty ausp 
+                    ON ( h.usr = ausp.usr AND ( ausp.stop_date IS NULL OR ausp.stop_date > NOW() ) )
+                  LEFT JOIN config.standing_penalty csp
+                    ON ( csp.id = ausp.standing_penalty AND csp.block_list LIKE '%CAPTURE%' )
               WHERE    a.circ_lib = ?
                   AND h.capture_time IS NULL
                   AND h.cancel_time IS NULL
                   AND (h.expire_time IS NULL OR h.expire_time > NOW())
+                  AND csp.id IS NULL
                 $status_filter
         SQL
     }
@@ -1285,7 +1300,7 @@ sub new_hold_copy_targeter {
 			my @good_copies;
 			for my $c (@$all_copies) {
 				# current target
-				next if ($c->id eq $hold->current_copy);
+				next if ($hold->current_copy and $c->id eq $hold->current_copy);
 
 				# skip on circ lib is closed IFF we care
 				my $ignore_closing;

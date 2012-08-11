@@ -3,8 +3,6 @@ dump('entering util/print.js\n');
 if (typeof util == 'undefined') util = {};
 util.print = function (context) {
 
-    netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-
     JSAN.use('util.error'); this.error = new util.error();
     JSAN.use('OpenILS.data'); this.data = new OpenILS.data(); this.data.init( { 'via':'stash' } );
     JSAN.use('util.window'); this.win = new util.window();
@@ -31,8 +29,6 @@ util.print = function (context) {
 util.print.prototype = {
 
     'set_context' : function(context, set_default) {
-        netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
-
         this.context = context || 'default';
         if(set_default) this.default_context = this.context;
     
@@ -136,7 +132,6 @@ util.print.prototype = {
 
             var w;
 
-            netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
             obj.data.init({'via':'stash'});
 
             if (typeof obj.data.print_strategy == 'undefined') {
@@ -187,7 +182,7 @@ util.print.prototype = {
                         print_url += '<script src="' + this.data.hash.aous['print.custom_js_file'] + '"></script>';
                     }
                     print_url += '</head><body onload="try{print_init(\'' + params.type + '\');}catch(E){alert(E);}">' + window.escape(msg.replace(/<script[^>]*>.*?<\/script>/gi,'')) + '</body></html>';
-                    obj.win.openDialog(print_url,'receipt_temp','chrome,resizable,modal', null, { "data" : params.data, "list" : params.list}, function(w) { 
+                    obj.win.openDialog(print_url,'receipt_temp','chrome,resizable,modal', { "data" : params.data, "list" : params.list}, function(w) { 
                         try {
                             obj.NSPrint(w, silent, params);
                         } catch(E) {
@@ -472,7 +467,6 @@ util.print.prototype = {
         try {
             if (!params) params = {};
 
-            netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
             obj.data.init({'via':'stash'});
 
             if (params.print_strategy || obj.data.print_strategy[obj.context] || obj.data.print_strategy['default']) {
@@ -493,7 +487,6 @@ util.print.prototype = {
                                 w = obj.html2txt(temp_w);
                             } catch(E) {
                                 dump('util.print: Could not use w.document.firstChild.innerHTML with ' + w + ': ' + E + '\n');
-                                netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
                                 w.getSelection().selectAllChildren(w.document.firstChild);
                                 w = w.getSelection().toString();
                             }
@@ -501,7 +494,6 @@ util.print.prototype = {
                         obj._NSPrint_custom_print(w,silent,params);
                     break;    
                     case 'window.print':
-                        netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
                         var prefs = Components.classes['@mozilla.org/preferences-service;1'].getService(Components.interfaces['nsIPrefBranch']);
                         var originalPrinter = false;
                         if (prefs.prefHasUserValue('print.print_printer')) {
@@ -518,9 +510,9 @@ util.print.prototype = {
                             }
                         } else {
                             if (params.content_type == 'text/plain') {
-                                w = window.open('data:text/plain,'+escape(params.msg));
+                                w = window.open('data:text/plain,'+escape(params.msg),'','chrome');
                             } else {
-                                w = window.open('data:text/html,'+escape(params.msg));
+                                w = window.open('data:text/html,'+escape(params.msg),'','chrome');
                             }
                             setTimeout(
                                 function() {
@@ -543,9 +535,9 @@ util.print.prototype = {
                             obj._NSPrint_webBrowserPrint(w,silent,params);
                         } else {
                             if (params.content_type == 'text/plain') {
-                                w = window.open('data:text/plain,'+escape(params.msg));
+                                w = window.open('data:text/plain,'+escape(params.msg),'','chrome');
                             } else {
-                                w = window.open('data:text/html,'+escape(params.msg));
+                                w = window.open('data:text/html,'+escape(params.msg),'','chrome');
                             }
                             setTimeout(
                                 function() {
@@ -619,7 +611,6 @@ util.print.prototype = {
     '_NSPrint_webBrowserPrint' : function(w,silent,params) {
         var obj = this;
         try {
-            netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
             var webBrowserPrint = w
                 .QueryInterface(Components.interfaces.nsIInterfaceRequestor)
                 .getInterface(Components.interfaces.nsIWebBrowserPrint);
@@ -648,7 +639,6 @@ util.print.prototype = {
     'GetPrintSettings' : function() {
         try {
             //alert('entering GetPrintSettings');
-            netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
             var pref = Components.classes["@mozilla.org/preferences-service;1"]
                 .getService(Components.interfaces.nsIPrefBranch);
             //alert('pref = ' + pref);
@@ -678,7 +668,6 @@ util.print.prototype = {
 
     'setPrinterDefaultsForSelectedPrinter' : function (aPrintService) {
         try {
-            netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
             if (this.gPrintSettings.printerName == "") {
                 this.gPrintSettings.printerName = aPrintService.defaultPrinterName;
                 //alert('used .defaultPrinterName');
@@ -701,7 +690,6 @@ util.print.prototype = {
 
     'page_settings' : function() {
         try {
-            netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
             this.GetPrintSettings();
             var PO = Components.classes["@mozilla.org/gfx/printsettings-service;1"].getService(Components.interfaces.nsIPrintOptions);
             PO.ShowPrintSetupDialog(this.gPrintSettings);
@@ -713,7 +701,6 @@ util.print.prototype = {
     'load_settings' : function() {
         try {
             var error_msg = '';
-            netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
             var file = new util.file('gPrintSettings.' + this.context);
             if (file._file.exists()) {
                 temp = file.get_object(); file.close();
@@ -759,7 +746,6 @@ util.print.prototype = {
     'save_settings' : function() {
         try {
             var obj = this;
-            netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
             var file = new util.file('gPrintSettings.' + this.context);
             if (typeof obj.gPrintSettings == 'undefined') obj.GetPrintSettings();
             if (obj.gPrintSettings) file.set_object(obj.gPrintSettings); 

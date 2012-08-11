@@ -20,13 +20,13 @@ INSERT INTO config.standing (id, value) VALUES (2, oils_i18n_gettext(2, 'Barred'
 SELECT SETVAL('config.standing_id_seq'::TEXT, 100);
 
 INSERT INTO config.standing_penalty (id,name,label,block_list,staff_alert)
-	VALUES (1,'PATRON_EXCEEDS_FINES',oils_i18n_gettext(1, 'Patron exceeds fine threshold', 'csp', 'label'),'CIRC|HOLD|RENEW', TRUE);
+	VALUES (1,'PATRON_EXCEEDS_FINES',oils_i18n_gettext(1, 'Patron exceeds fine threshold', 'csp', 'label'),'CIRC|FULFILL|HOLD|CAPTURE|RENEW', TRUE);
 INSERT INTO config.standing_penalty (id,name,label,block_list,staff_alert)
-	VALUES (2,'PATRON_EXCEEDS_OVERDUE_COUNT',oils_i18n_gettext(2, 'Patron exceeds max overdue item threshold', 'csp', 'label'),'CIRC|HOLD|RENEW', TRUE);
+	VALUES (2,'PATRON_EXCEEDS_OVERDUE_COUNT',oils_i18n_gettext(2, 'Patron exceeds max overdue item threshold', 'csp', 'label'),'CIRC|FULFILL|HOLD|CAPTURE|RENEW', TRUE);
 INSERT INTO config.standing_penalty (id,name,label,block_list,staff_alert)
-	VALUES (3,'PATRON_EXCEEDS_CHECKOUT_COUNT',oils_i18n_gettext(3, 'Patron exceeds max checked out item threshold', 'csp', 'label'),'CIRC', TRUE);
+	VALUES (3,'PATRON_EXCEEDS_CHECKOUT_COUNT',oils_i18n_gettext(3, 'Patron exceeds max checked out item threshold', 'csp', 'label'),'CIRC|FULFILL', TRUE);
 INSERT INTO config.standing_penalty (id,name,label,block_list,staff_alert)
-	VALUES (4,'PATRON_EXCEEDS_COLLECTIONS_WARNING',oils_i18n_gettext(4, 'Patron exceeds pre-collections warning fine threshold', 'csp', 'label'),'CIRC|HOLD|RENEW', TRUE);
+	VALUES (4,'PATRON_EXCEEDS_COLLECTIONS_WARNING',oils_i18n_gettext(4, 'Patron exceeds pre-collections warning fine threshold', 'csp', 'label'),'CIRC|FULFILL|HOLD|CAPTURE|RENEW', TRUE);
 
 INSERT INTO config.standing_penalty (id,name,label,staff_alert) VALUES (20,'ALERT_NOTE',oils_i18n_gettext(20, 'Alerting Note, no blocks', 'csp', 'label'),TRUE);
 INSERT INTO config.standing_penalty (id,name,label) VALUES (21,'SILENT_NOTE',oils_i18n_gettext(21, 'Note, no blocks', 'csp', 'label'));
@@ -1557,7 +1557,16 @@ INSERT INTO permission.perm_list ( id, code, description ) VALUES
  ( 533, 'ADMIN_COPY_LOCATION_GROUP', oils_i18n_gettext( 533,
     'Allows a user to create/retrieve/update/delete copy location groups', 'ppl', 'description' )), 
  ( 534, 'ADMIN_USER_ACTIVITY_TYPE', oils_i18n_gettext( 534,
-    'Allows a user to create/retrieve/update/delete user activity types', 'ppl', 'description' ));
+    'Allows a user to create/retrieve/update/delete user activity types', 'ppl', 'description' )),
+( 535, 'VIEW_TRIGGER_EVENT', oils_i18n_gettext( 535,
+    'Allows a user to view circ- and hold-related action/trigger events', 'ppl', 'description')),
+( 536, 'IMPORT_OVERLAY_COPY', oils_i18n_gettext( 536,
+    'Allows a user to overlay copy data in MARC import', 'ppl', 'description')),
+ ( 537, 'ADMIN_SEARCH_FILTER_GROUP', oils_i18n_gettext( 537,
+    'Allows staff to manage search filter groups and entries', 'ppl', 'description' )),
+ ( 538, 'VIEW_SEARCH_FILTER_GROUP', oils_i18n_gettext( 538,
+    'Allows staff to view search filter groups and entries', 'ppl', 'description' ))
+;
 
 
 SELECT SETVAL('permission.perm_list_id_seq'::TEXT, 1000);
@@ -2416,11 +2425,11 @@ INSERT INTO asset.call_number VALUES (-1,1,NOW(),1,NOW(),-1,1,'UNCATALOGED');
 -- circ matrix
 INSERT INTO config.circ_matrix_matchpoint (org_unit,grp,circulate,duration_rule,recurring_fine_rule,max_fine_rule) VALUES (1,1,true,11,1,1);
 
-INSERT INTO config.circ_matrix_weights(name, org_unit, grp, circ_modifier, marc_type, marc_form, marc_bib_level, marc_vr_format, copy_circ_lib, copy_owning_lib, user_home_ou, ref_flag, juvenile_flag, is_renewal, usr_age_upper_bound, usr_age_lower_bound, item_age) VALUES 
-    ('Default', 10.0, 11.0, 5.0, 4.0, 3.0, 2.0, 2.0, 8.0, 8.0, 8.0, 1.0, 6.0, 7.0, 0.0, 0.0, 0.0),
-    ('Org_Unit_First', 11.0, 10.0, 5.0, 4.0, 3.0, 2.0, 2.0, 8.0, 8.0, 8.0, 1.0, 6.0, 7.0, 0.0, 0.0, 0.0),
-    ('Item_Owner_First', 8.0, 8.0, 5.0, 4.0, 3.0, 2.0, 2.0, 10.0, 11.0, 8.0, 1.0, 6.0, 7.0, 0.0, 0.0, 0.0),
-    ('All_Equal', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+INSERT INTO config.circ_matrix_weights(name, org_unit, grp, circ_modifier, copy_location, marc_type, marc_form, marc_bib_level, marc_vr_format, copy_circ_lib, copy_owning_lib, user_home_ou, ref_flag, juvenile_flag, is_renewal, usr_age_upper_bound, usr_age_lower_bound, item_age) VALUES 
+    ('Default', 10.0, 11.0, 5.0, 5.0, 4.0, 3.0, 2.0, 2.0, 8.0, 8.0, 8.0, 1.0, 6.0, 7.0, 0.0, 0.0, 0.0),
+    ('Org_Unit_First', 11.0, 10.0, 5.0, 5.0, 4.0, 3.0, 2.0, 2.0, 8.0, 8.0, 8.0, 1.0, 6.0, 7.0, 0.0, 0.0, 0.0),
+    ('Item_Owner_First', 8.0, 8.0, 5.0, 5.0, 4.0, 3.0, 2.0, 2.0, 10.0, 11.0, 8.0, 1.0, 6.0, 7.0, 0.0, 0.0, 0.0),
+    ('All_Equal', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 
 -- hold matrix - 110.hold_matrix.sql:
 INSERT INTO config.hold_matrix_matchpoint (requestor_grp) VALUES (1);
@@ -2463,8 +2472,9 @@ INSERT INTO config.usr_setting_type (name,opac_visible,label,description,datatyp
 INSERT INTO config.usr_setting_type (name,opac_visible,label,description,datatype)
     VALUES ('opac.default_pickup_location', TRUE, 'Default Hold Pickup Location', 'Default location for holds pickup', 'integer');
 
--- Add groups for org_unitu settings
+-- Add groups for org_unit settings
 INSERT INTO config.settings_group (name, label) VALUES
+('acq', oils_i18n_gettext('config.settings_group.system', 'Acquisitions', 'coust', 'label')),
 ('sys', oils_i18n_gettext('config.settings_group.system', 'System', 'coust', 'label')),
 ('gui', oils_i18n_gettext('config.settings_group.gui', 'GUI', 'coust', 'label')),
 ('lib', oils_i18n_gettext('config.settings_group.lib', 'Library', 'coust', 'label')),
@@ -2492,7 +2502,7 @@ INSERT INTO config.settings_group (name, label) VALUES
 INSERT into config.org_unit_setting_type
 ( name, grp, label, description, datatype, fm_class ) VALUES
 
-( 'acq.copy_creator_uses_receiver', 'lib',
+( 'acq.copy_creator_uses_receiver', 'acq',
     oils_i18n_gettext('acq.copy_creator_uses_receiver',
         'Set copy creator as receiver',
         'coust', 'label'),
@@ -2501,7 +2511,7 @@ INSERT into config.org_unit_setting_type
         'coust', 'description'),
     'bool', null)
 
-,( 'acq.default_circ_modifier', 'lib',
+,( 'acq.default_circ_modifier', 'acq',
     oils_i18n_gettext('acq.default_circ_modifier',
         'Default circulation modifier',
         'coust', 'label'),
@@ -2510,7 +2520,7 @@ INSERT into config.org_unit_setting_type
         'coust', 'description'),
     'string', null)
 
-,( 'acq.default_copy_location', 'lib',
+,( 'acq.default_copy_location', 'acq',
     oils_i18n_gettext('acq.default_copy_location',
         'Default copy location',
         'coust', 'label'),
@@ -2519,7 +2529,7 @@ INSERT into config.org_unit_setting_type
         'coust', 'description'),
     'link', 'acpl')
 
-,( 'acq.fund.balance_limit.block', 'finance',
+,( 'acq.fund.balance_limit.block', 'acq',
     oils_i18n_gettext('acq.fund.balance_limit.block',
         'Fund Spending Limit for Block',
         'coust', 'label'),
@@ -2528,7 +2538,7 @@ INSERT into config.org_unit_setting_type
         'coust', 'description'),
     'integer', null)
 
-,( 'acq.fund.balance_limit.warn', 'finance',
+,( 'acq.fund.balance_limit.warn', 'acq',
     oils_i18n_gettext('acq.fund.balance_limit.warn',
         'Fund Spending Limit for Warning',
         'coust', 'label'),
@@ -2537,7 +2547,7 @@ INSERT into config.org_unit_setting_type
         'coust', 'description'),
     'integer', null)
 
-,( 'acq.holds.allow_holds_from_purchase_request', 'lib',
+,( 'acq.holds.allow_holds_from_purchase_request', 'acq',
     oils_i18n_gettext('acq.holds.allow_holds_from_purchase_request',
         'Allows patrons to create automatic holds from purchase requests.',
         'coust', 'label'),
@@ -2546,7 +2556,7 @@ INSERT into config.org_unit_setting_type
         'coust', 'description'),
     'bool', null)
 
-,( 'acq.tmp_barcode_prefix', 'lib',
+,( 'acq.tmp_barcode_prefix', 'acq',
     oils_i18n_gettext('acq.tmp_barcode_prefix',
         'Temporary barcode prefix',
         'coust', 'label'),
@@ -2555,7 +2565,7 @@ INSERT into config.org_unit_setting_type
         'coust', 'description'),
     'string', null)
 
-,( 'acq.tmp_callnumber_prefix', 'lib',
+,( 'acq.tmp_callnumber_prefix', 'acq',
     oils_i18n_gettext('acq.tmp_callnumber_prefix',
         'Temporary call number prefix',
         'coust', 'label'),
@@ -6348,6 +6358,29 @@ INSERT INTO config.coded_value_map (id, ctype, code, value) VALUES
     (535, 'bib_level', 'm', oils_i18n_gettext('535', 'Monograph/Item', 'ccvm', 'value')),
     (536, 'bib_level', 's', oils_i18n_gettext('536', 'Serial', 'ccvm', 'value'));
 
+INSERT INTO config.coded_value_map(id, ctype, code, value) VALUES
+    (537, 'vr_format', 'a', oils_i18n_gettext('537', 'Beta', 'ccvm', 'value')),
+    (538, 'vr_format', 'b', oils_i18n_gettext('538', 'VHS', 'ccvm', 'value')),
+    (539, 'vr_format', 'c', oils_i18n_gettext('539', 'U-matic', 'ccvm', 'value')),
+    (540, 'vr_format', 'd', oils_i18n_gettext('540', 'EIAJ', 'ccvm', 'value')),
+    (541, 'vr_format', 'e', oils_i18n_gettext('541', 'Type C', 'ccvm', 'value')),
+    (542, 'vr_format', 'f', oils_i18n_gettext('542', 'Quadruplex', 'ccvm', 'value')),
+    (543, 'vr_format', 'g', oils_i18n_gettext('543', 'Laserdisc', 'ccvm', 'value')),
+    (544, 'vr_format', 'h', oils_i18n_gettext('544', 'CED videodisc', 'ccvm', 'value')),
+    (545, 'vr_format', 'i', oils_i18n_gettext('545', 'Betacam', 'ccvm', 'value')),
+    (546, 'vr_format', 'j', oils_i18n_gettext('546', 'Betacam SP', 'ccvm', 'value')),
+    (547, 'vr_format', 'k', oils_i18n_gettext('547', 'Super-VHS', 'ccvm', 'value')),
+    (548, 'vr_format', 'm', oils_i18n_gettext('548', 'M-II', 'ccvm', 'value')),
+    (549, 'vr_format', 'o', oils_i18n_gettext('549', 'D-2', 'ccvm', 'value')),
+    (550, 'vr_format', 'p', oils_i18n_gettext('550', '8 mm.', 'ccvm', 'value')),
+    (551, 'vr_format', 'q', oils_i18n_gettext('551', 'Hi-8 mm.', 'ccvm', 'value')),
+    (552, 'vr_format', 's', oils_i18n_gettext('552', 'Blu-ray disc', 'ccvm', 'value')),
+    (553, 'vr_format', 'u', oils_i18n_gettext('553', 'Unknown', 'ccvm', 'value')),
+    (554, 'vr_format', 'v', oils_i18n_gettext('554', 'DVD', 'ccvm', 'value')),
+    (555, 'vr_format', 'z', oils_i18n_gettext('555', 'Other', 'ccvm', 'value')),
+    (556, 'vr_format', ' ', oils_i18n_gettext('556', 'Unspecified', 'ccvm', 'value'));
+
+SELECT SETVAL('config.coded_value_map_id_seq'::TEXT, (SELECT max(id) FROM config.coded_value_map));
 
 -- Trigger Event Definitions -------------------------------------------------
 
@@ -8029,7 +8062,32 @@ END;
             "free-text":[ 
                 [% FOR note IN ftx_vals -%] "[% note %]"[% UNLESS loop.last %], [% END %][% END %] 
             ],            
-            "quantity":[% li.lineitem_details.size %]
+            "quantity":[% li.lineitem_details.size %],
+            "copies" : [
+                [%- IF 1 -%]
+                [%- FOR lid IN li.lineitem_details;
+                        fund = lid.fund.code;
+                        item_type = lid.circ_modifier;
+                        callnumber = lid.cn_label;
+                        owning_lib = lid.owning_lib.shortname;
+                        location = lid.location;
+    
+                        # when we have real copy data, treat it as authoritative for some fields
+                        acp = lid.eg_copy_id;
+                        IF acp;
+                            item_type = acp.circ_modifier;
+                            callnumber = acp.call_number.label;
+                            location = acp.location.name;
+                        END -%]
+                {   [%- IF fund %] "fund" : "[% fund %]",[% END -%]
+                    [%- IF callnumber %] "call_number" : "[% callnumber %]", [% END -%]
+                    [%- IF item_type %] "item_type" : "[% item_type %]", [% END -%]
+                    [%- IF location %] "copy_location" : "[% location %]", [% END -%]
+                    [%- IF owning_lib %] "owning_lib" : "[% owning_lib %]", [% END -%]
+                    [%- #chomp %]"copy_id" : "[% lid.id %]" }[% ',' UNLESS loop.last %]
+                [% END -%]
+                [%- END -%]
+             ]
         }[% UNLESS loop.last %],[% END %]
         [%-# TODO: lineitem details (later) -%]
         [% END %]
@@ -8045,7 +8103,11 @@ $$
 
 INSERT INTO action_trigger.environment (event_def, path) VALUES 
   (23, 'lineitems.attributes'), 
-  (23, 'lineitems.lineitem_details'), 
+  (23, 'lineitems.lineitem_details.owning_lib'),
+  (23, 'lineitems.lineitem_details.location'),
+  (23, 'lineitems.lineitem_details.fund'),
+  (23, 'lineitems.lineitem_details.eg_copy_id.location'),
+  (23, 'lineitems.lineitem_details.eg_copy_id.call_number'),
   (23, 'lineitems.lineitem_notes'), 
   (23, 'ordering_agency.mailing_address'), 
   (23, 'provider'),
@@ -10079,7 +10141,7 @@ INSERT INTO authority.thesaurus (code, name, control_set) VALUES
     ('s', oils_i18n_gettext('s','Sears List of Subject Headings','at','name'), 1),
     ('v', oils_i18n_gettext('v','Repertoire de vedettes-matiere','at','name'), 1),
     ('z', oils_i18n_gettext('z','Other','at','name'), 1),
-    ('|', oils_i18n_gettext('|','No attempt to code','at','name'), 1);
+    ('|', oils_i18n_gettext('|','No attempt to code','at','name'), NULL);
 
 INSERT INTO action_trigger.hook ( key, core_type, description, passive ) VALUES (
     'reservation.available',
@@ -10155,6 +10217,43 @@ INSERT INTO config.usr_setting_type (name,grp,opac_visible,label,description,dat
     ),
     'string'
 );
+
+INSERT INTO config.usr_setting_type (name,grp,opac_visible,label,description,datatype) VALUES (
+    'ui.grid_columns.circ.hold_pull_list',
+    'gui',
+    FALSE,
+    oils_i18n_gettext(
+        'ui.grid_columns.circ.hold_pull_list',
+        'Hold Pull List',
+        'cust',
+        'label'
+    ),
+    oils_i18n_gettext(
+        'ui.grid_columns.circ.hold_pull_list',
+        'Hold Pull List Saved Column Settings',
+        'cust',
+        'description'
+    ),
+    'string'
+), (
+    'ui.grid_columns.actor.user.event_log',
+    'gui',
+    FALSE,
+    oils_i18n_gettext(
+        'ui.grid_columns.actor.user.event_log',
+        'User Event Log',
+        'cust',
+        'label'
+    ),
+    oils_i18n_gettext(
+        'ui.grid_columns.actor.user.event_log',
+        'User Event Log Saved Column Settings',
+        'cust',
+        'description'
+    ),
+    'string'
+) ;
+
 SELECT setval( 'config.sms_carrier_id_seq', 1000 );
 INSERT INTO config.sms_carrier VALUES
 
@@ -11590,4 +11689,147 @@ INSERT INTO config.org_unit_setting_type ( name, label, description, datatype, g
         'gui'
     );
 
+INSERT into config.org_unit_setting_type 
+    (name, grp, label, description, datatype) 
+    VALUES ( 
+        'opac.patron.auto_overide_hold_events', 
+        'opac',
+        oils_i18n_gettext(
+            'opac.patron.auto_overide_hold_events',
+            'Auto-Override Permitted Hold Blocks (Patrons)',
+            'coust', 
+            'label'
+        ),
+        oils_i18n_gettext(
+            'opac.patron.auto_overide_hold_events',
+            'When a patron places a hold that fails and the patron has the correct permission ' || 
+            'to override the hold, automatically override the hold without presenting a message ' || 
+            'to the patron and requiring that the patron make a decision to override',
+            'coust', 
+            'description'
+        ),
+        'bool'
+    );
+
+INSERT into config.org_unit_setting_type
+    (name, grp, label, description, datatype)
+    VALUES (
+        'opac.patron.temporary_list_warn',
+        'opac',
+        oils_i18n_gettext(
+            'opac.patron.temporary_list_warn',
+            'Warn patrons when adding to a temporary book list',
+            'coust',
+            'label'
+        ),
+        oils_i18n_gettext(
+            'opac.patron.temporary_list_warn',
+            'Present a warning dialog to the patron when a patron adds a book to a temporary book bag.',
+            'coust',
+            'description'
+        ),
+        'bool'
+    );
+
+INSERT INTO config.usr_setting_type
+    (name,grp,opac_visible,label,description,datatype)
+VALUES (
+    'opac.temporary_list_no_warn',
+    'opac',
+    TRUE,
+    oils_i18n_gettext(
+        'opac.temporary_list_no_warn',
+        'Opt out of warning when adding a book to a temporary book list',
+        'cust',
+        'label'
+    ),
+    oils_i18n_gettext(
+        'opac.temporary_list_no_warn',
+        'Opt out of warning when adding a book to a temporary book list',
+        'cust',
+        'description'
+    ),
+    'bool'
+);
+
+INSERT INTO config.usr_setting_type
+    (name,grp,opac_visible,label,description,datatype)
+VALUES (
+    'opac.default_list',
+    'opac',
+    FALSE,
+    oils_i18n_gettext(
+        'opac.default_list',
+        'Default list to use when adding to a bookbag',
+        'cust',
+        'label'
+    ),
+    oils_i18n_gettext(
+        'opac.default_list',
+        'Default list to use when adding to a bookbag',
+        'cust',
+        'description'
+    ),
+    'integer'
+);
+
+INSERT INTO config.org_unit_setting_type (
+    name, grp, label, description, datatype
+) VALUES (
+    'circ.staff.max_visible_event_age',
+    'circ',
+    'Maximum visible age of User Trigger Events in Staff Interfaces',
+    'If this is unset, staff can view User Trigger Events regardless of age. When this is set to an interval, it represents the age of the oldest possible User Trigger Event that can be viewed.',
+    'interval'
+);
+
+-- kid's opac main search filter
+
+INSERT INTO actor.search_filter_group (owner, code, label) 
+    VALUES (1, 'kpac_main', 'Kid''s OPAC Search Filter');
+
+INSERT INTO actor.search_query (label, query_text) 
+    VALUES ('Children''s Materials', 'audience(a,b,c)');
+INSERT INTO actor.search_query (label, query_text) 
+    VALUES ('Young Adult Materials', 'audience(j,d)');
+INSERT INTO actor.search_query (label, query_text) 
+    VALUES ('General/Adult Materials',  'audience(e,f,g, )');
+
+INSERT INTO actor.search_filter_group_entry (grp, query, pos)
+    VALUES (
+        (SELECT id FROM actor.search_filter_group WHERE code = 'kpac_main'),
+        (SELECT id FROM actor.search_query WHERE label = 'Children''s Materials'),
+        0
+    );
+INSERT INTO actor.search_filter_group_entry (grp, query, pos) 
+    VALUES (
+        (SELECT id FROM actor.search_filter_group WHERE code = 'kpac_main'),
+        (SELECT id FROM actor.search_query WHERE label = 'Young Adult Materials'),
+        1
+    );
+INSERT INTO actor.search_filter_group_entry (grp, query, pos) 
+    VALUES (
+        (SELECT id FROM actor.search_filter_group WHERE code = 'kpac_main'),
+        (SELECT id FROM actor.search_query WHERE label = 'General/Adult Materials'),
+        2
+    );
+INSERT into config.org_unit_setting_type
+    (name, grp, label, description, datatype)
+    VALUES (
+        'acq.fund.allow_rollover_without_money',
+        'acq',
+        oils_i18n_gettext(
+            'acq.fund.allow_rollover_without_money',
+            'Allow funds to be rolled over without bringing the money along',
+            'coust',
+            'label'
+        ),
+        oils_i18n_gettext(
+            'acq.fund.allow_rollover_without_money',
+            'Allow funds to be rolled over without bringing the money along.  This makes money left in the old fund disappear, modeling its return to some outside entity.',
+            'coust',
+            'description'
+        ),
+        'bool'
+    );
 

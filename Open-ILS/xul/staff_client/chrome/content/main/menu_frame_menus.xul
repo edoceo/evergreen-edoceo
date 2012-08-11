@@ -32,6 +32,7 @@
     <command id="cmd_circ_hold_pull_list" />
     <command id="cmd_browse_holds" />
     <command id="cmd_browse_holds_shelf" />
+    <command id="cmd_clear_holds_shelf" />
     <command id="cmd_in_house_use" />
     <command id="cmd_scan_item_as_missing_pieces" />
     <command id="cmd_copy_status" />
@@ -155,6 +156,8 @@
              />
     <command id="cmd_local_admin_copy_location_group"
              perm="ADMIN_COPY_LOCATION_GROUP VIEW_COPY_LOCATION_GROUP" />
+    <command id="cmd_local_admin_search_filter_group"
+             perm="ADMIN_SEARCH_FILTER_GROUP VIEW_SEARCH_FILTER_GROUP" />
 
     <!-- server admin menu commands -->
     <command id="cmd_server_admin_org_type"
@@ -325,6 +328,7 @@
         <menuitem label="&staff.main.menu.circ.hold_capture.label;" accesskey="&staff.main.menu.circ.hold_capture.accesskey;" command="cmd_circ_hold_capture"/>
         <menuitem label="&staff.main.menu.circ.hold_pull.label;" accesskey="&staff.main.menu.circ.hold_pull.accesskey;" command="cmd_circ_hold_pull_list"/>
         <menuitem label="&staff.main.menu.circ.hold_browse.label;" command="cmd_browse_holds_shelf" accesskey="&staff.main.menu.circ.hold_browse.accesskey;"/>
+        <menuitem label="&staff.main.menu.circ.hold_clear.label;" command="cmd_clear_holds_shelf" accesskey="&staff.main.menu.circ.hold_clear.accesskey;"/>
         <menuitem label="&staff.main.menu.circ.place_hold.label;" accesskey="&staff.main.menu.circ.place_hold.accesskey;" command="cmd_search_opac"/>
         <menuseparator />
         <menuitem label="&staff.main.menu.circ.barcode.show_item;" accesskey="&staff.main.menu.circ.barcode.show_item.accesskey;" command="cmd_copy_status"/>
@@ -513,6 +517,7 @@
                 <menuitem label="&staff.main.menu.admin.local_admin.patrons_due_refunds.label;" accesskey="&staff.main.menu.admin.local_admin.patrons_due_refunds.accesskey;" command="cmd_local_admin_patrons_due_refunds"/>
                 <menuitem command="cmd_local_admin_do_not_auto_attempt_print_setting" label="&staff.server.admin.index.do_not_auto_attempt_print_setting.label;" accesskey="&staff.server.admin.index.do_not_auto_attempt_print_setting.accesskey;"/>
                 <menuitem label="&staff.server.admin.index.reports;" command="cmd_local_admin_reports"/>
+                <menuitem label="&staff.main.menu.admin.local_admin.search_filter_group.label;" command="cmd_local_admin_search_filter_group"/>
                 <menuitem label="&staff.main.menu.admin.local_admin.conify.standing_penalty.label;" command="cmd_local_admin_standing_penalty"/>
                 <menuitem label="&staff.server.admin.index.statistical_categories;" command="cmd_local_admin_stat_cats"/>
                 <menuitem label="&staff.main.menu.admin.local_admin.conify.survey.label;" command="cmd_local_admin_survey"/>
@@ -629,7 +634,7 @@
                 <menuitem label="&staff.main.menu.admin.venkman.label;" command="cmd_debug_venkman"/>
                 <menuitem label="&staff.main.auth.debug.inspector;" command="cmd_debug_inspector"/>
                 <menuitem label="&staff.main.auth.debug.chrome_list;" command="cmd_debug_chrome_list"/>
-                <menuitem label="&staff.main.menu.admin.ping;" oncommand="try{netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');JSAN.use('util.network'); var n = new util.network(); alert(n.ping());}catch(E){alert(E);}"/>
+                <menuitem label="&staff.main.menu.admin.ping;" oncommand="try{JSAN.use('util.network'); var n = new util.network(); alert(n.ping());}catch(E){alert(E);}"/>
             </menupopup>
         </menu>
     </menupopup>

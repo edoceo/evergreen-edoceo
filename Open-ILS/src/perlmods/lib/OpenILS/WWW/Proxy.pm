@@ -12,7 +12,7 @@ use OpenSRF::EX qw(:try);
 use OpenSRF::System;
 
 
-# set the bootstrap config and template include directory when 
+# set the bootstrap config and template include directory when
 # this module is loaded
 my $bootstrap;
 my $ssl_off;
@@ -109,7 +109,8 @@ sub handler {
 				-cookie=>$cgi->cookie(
 					-name=>'ses',
 					-value=>$auth_ses,
-					-path=>'/'
+					-path=>'/',
+					-secure=>1
 				)
 			);
 			return Apache2::Const::REDIRECT;

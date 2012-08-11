@@ -2396,16 +2396,17 @@ __PACKAGE__->register_method(
 );
 
 sub register_workstation {
-	my( $self, $conn, $authtoken, $name, $owner ) = @_;
+	my( $self, $conn, $authtoken, $name, $owner, $oargs ) = @_;
 
 	my $e = new_editor(authtoken=>$authtoken, xact=>1);
 	return $e->die_event unless $e->checkauth;
 	return $e->die_event unless $e->allowed('REGISTER_WORKSTATION', $owner);
 	my $existing = $e->search_actor_workstation({name => $name})->[0];
+    $oargs = { all => 1 } unless defined $oargs;
 
 	if( $existing ) {
 
-		if( $self->api_name =~ /override/o ) {
+		if( $self->api_name =~ /override/o && ($oargs->{all} || grep { $_ eq 'WORKSTATION_NAME_EXISTS' } @{$oargs->{events}}) ) {
             # workstation with the given name exists.  
 
             if($owner ne $existing->owning_lib) {
@@ -2785,46 +2786,6 @@ sub safe_token_home_lib {
 
 	$cache ||= OpenSRF::Utils::Cache->new("global", 0);
 	return $cache->get_cache( 'safe-token-home_lib-shortname-'. $safe_token );
-}
-
-
-
-__PACKAGE__->register_method(
-    method   => 'slim_tree',
-    api_name => "open-ils.actor.org_tree.slim_hash.retrieve",
-);
-sub slim_tree {
-	my $tree = new_editor()->search_actor_org_unit( 
-		[
-			{"parent_ou" => undef },
-			{
-				flesh				=> -1,
-				flesh_fields	=> { aou =>  ['children'] },
-				order_by			=> { aou => 'name'},
-				select			=> { aou => ["id","shortname", "name"]},
-			}
-		]
-	)->[0];
-
-	return trim_tree($tree);
-}
-
-
-sub trim_tree {
-	my $tree = shift;
-	return undef unless $tree;
-	my $htree = {
-		code => $tree->shortname,
-		name => $tree->name,
-	};
-	if( $tree->children and @{$tree->children} ) {
-		$htree->{children} = [];
-		for my $c (@{$tree->children}) {
-			push( @{$htree->{children}}, trim_tree($c) );
-		}
-	}
-
-	return $htree;
 }
 
 
@@ -3639,9 +3600,10 @@ __PACKAGE__->register_method (
 );
 
 sub really_delete_user {
-    my($self, $conn, $auth, $user_id, $dest_user_id) = @_;
+    my($self, $conn, $auth, $user_id, $dest_user_id, $oargs) = @_;
     my $e = new_editor(authtoken => $auth, xact => 1);
     return $e->die_event unless $e->checkauth;
+    $oargs = { all => 1 } unless defined $oargs;
 
     # Find all unclosed billings for for user $user_id, thereby, also checking for open circs
     my $open_bills = $e->json_query({
@@ -3658,7 +3620,7 @@ sub really_delete_user {
     # No deleting patrons with open billings or checked out copies, unless perm-enabled override
     if (@$open_bills) {
         return $e->die_event(OpenILS::Event->new('ACTOR_USER_DELETE_OPEN_XACTS'))
-        unless $self->api_name =~ /override/o
+        unless $self->api_name =~ /override/o && ($oargs->{all} || grep { $_ eq 'ACTOR_USER_DELETE_OPEN_XACTS' } @{$oargs->{events}})
         && $e->allowed('ACTOR_USER_DELETE_OPEN_XACTS.override', $user->home_ou);
     }
     # No deleting yourself - UI is supposed to stop you first, though.
@@ -4641,6 +4603,157 @@ sub mark_users_contact_invalid {
         $e, $contact_type, {usr => $patron_id},
         $addl_note, $penalty_ou, $e->requestor->id
     );
+}
+
+# Putting the following method in open-ils.actor is a bad fit, except in that
+# it serves an interface that lives under 'actor' in the templates directory,
+# and in that there's nowhere else obvious to put it (open-ils.trigger is
+# private).
+__PACKAGE__->register_method(
+    api_name => "open-ils.actor.action_trigger.reactors.all_in_use",
+    method   => "get_all_at_reactors_in_use",
+    api_level=> 1,
+    argc     => 1,
+    signature=> {
+        params => [
+            { name => 'authtoken', type => 'string' }
+        ],
+        return => {
+            desc => 'list of reactor names', type => 'array'
+        }
+    }
+);
+
+sub get_all_at_reactors_in_use {
+    my ($self, $conn, $auth) = @_;
+
+    my $e = new_editor(authtoken => $auth);
+    $e->checkauth or return $e->die_event;
+    return $e->die_event unless $e->allowed('VIEW_TRIGGER_EVENT_DEF');
+
+    my $reactors = $e->json_query({
+        select => {
+            atevdef => [{column => "reactor", transform => "distinct"}]
+        },
+        from => {atevdef => {}}
+    });
+
+    return $e->die_event unless ref $reactors eq "ARRAY";
+    $e->disconnect;
+
+    return [ map { $_->{reactor} } @$reactors ];
+}
+
+__PACKAGE__->register_method(
+    method   => "filter_group_entry_crud",
+    api_name => "open-ils.actor.filter_group_entry.crud",
+    signature => {
+        desc => q/
+            Provides CRUD access to filter group entry objects.  These are not full accessible
+            via PCRUD, since they requre "asq" objects for storing the query, and "asq" objects
+            are not accessible via PCRUD (because they have no fields against which to link perms)
+            /,
+        params => [
+            {desc => "Authentication token", type => "string"},
+            {desc => "Entry ID / Entry Object", type => "number"},
+            {desc => "Additional note text (optional)", type => "string"},
+            {desc => "penalty org unit ID (optional, default to top of org tree)",
+                type => "number"}
+        ],
+        return => {
+            desc => "Entry fleshed with query on Create, Retrieve, and Uupdate.  1 on Delete", 
+            type => "object"
+        }
+    }
+);
+
+sub filter_group_entry_crud {
+    my ($self, $conn, $auth, $arg) = @_;
+
+    return OpenILS::Event->new('BAD_PARAMS') unless $arg;
+    my $e = new_editor(authtoken => $auth, xact => 1);
+    return $e->die_event unless $e->checkauth;
+
+    if (ref $arg) {
+
+        if ($arg->isnew) {
+            
+            my $grp = $e->retrieve_actor_search_filter_group($arg->grp)
+                or return $e->die_event;
+
+            return $e->die_event unless $e->allowed(
+                'ADMIN_SEARCH_FILTER_GROUP', $grp->owner);
+
+            my $query = $arg->query;
+            $query = $e->create_actor_search_query($query) or return $e->die_event;
+            $arg->query($query->id);
+            my $entry = $e->create_actor_search_filter_group_entry($arg) or return $e->die_event;
+            $entry->query($query);
+
+            $e->commit;
+            return $entry;
+
+        } elsif ($arg->ischanged) {
+
+            my $entry = $e->retrieve_actor_search_filter_group_entry([
+                $arg->id, {
+                    flesh => 1,
+                    flesh_fields => {asfge => ['grp']}
+                }
+            ]) or return $e->die_event;
+
+            return $e->die_event unless $e->allowed(
+                'ADMIN_SEARCH_FILTER_GROUP', $entry->grp->owner);
+
+            my $query = $e->update_actor_search_query($arg->query) or return $e->die_event;
+            $arg->query($arg->query->id);
+            $e->update_actor_search_filter_group_entry($arg) or return $e->die_event;
+            $arg->query($query);
+
+            $e->commit;
+            return $arg;
+
+        } elsif ($arg->isdeleted) {
+
+            my $entry = $e->retrieve_actor_search_filter_group_entry([
+                $arg->id, {
+                    flesh => 1,
+                    flesh_fields => {asfge => ['grp', 'query']}
+                }
+            ]) or return $e->die_event;
+
+            return $e->die_event unless $e->allowed(
+                'ADMIN_SEARCH_FILTER_GROUP', $entry->grp->owner);
+
+            $e->delete_actor_search_filter_group_entry($entry) or return $e->die_event;
+            $e->delete_actor_search_query($entry->query) or return $e->die_event;
+
+            $e->commit;
+            return 1;
+
+        } else {
+
+            $e->rollback;
+            return undef;
+        }
+
+    } else {
+
+        my $entry = $e->retrieve_actor_search_filter_group_entry([
+            $arg, {
+                flesh => 1,
+                flesh_fields => {asfge => ['grp', 'query']}
+            }
+        ]) or return $e->die_event;
+
+        return $e->die_event unless $e->allowed(
+            ['ADMIN_SEARCH_FILTER_GROUP', 'VIEW_SEARCH_FILTER_GROUP'], 
+            $entry->grp->owner);
+
+        $e->rollback;
+        $entry->grp($entry->grp->id); # for consistency
+        return $entry;
+    }
 }
 
 1;

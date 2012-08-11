@@ -152,7 +152,6 @@ function set_flat_editor (useFlatText) {
 function my_init() {
     try {
 
-        netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
         if (typeof JSAN == 'undefined') { throw( $("commonStrings").getString('common.jsan.missing') ); }
         JSAN.errorLevel = "die"; // none, warn, or die
         JSAN.addRepository('/xul/server/');
@@ -225,7 +224,6 @@ function my_init() {
         var locale = "en-US";
 
         // Try to get the locale from our preferences
-        netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
         try {
             const Cc = Components.classes;
             const Ci = Components.interfaces;
@@ -269,7 +267,7 @@ function my_init() {
         context_menus = createComplexXULElement('popupset');
         document.documentElement.appendChild( context_menus );
 
-        tag_menu = createPopup({position : 'after_start', id : 'tags_popup'});
+        tag_menu = createMenuPopup({position : 'after_start', id : 'tags_popup'});
         context_menus.appendChild( tag_menu );
 
         tag_menu.appendChild(
@@ -495,7 +493,7 @@ function setFocusToNextTag (row, direction) {
 function createMARCTextbox (element,attrs) {
 
     var box = createComplexXULElement('textbox', attrs, Array.prototype.slice.apply(arguments, [2]) );
-    box.addEventListener('keypress',function(ev) { netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect"); if (!(ev.altKey || ev.ctrlKey || ev.metaKey)) { oils_lock_page(); } },false);
+    box.addEventListener('keypress',function(ev) { if (!(ev.altKey || ev.ctrlKey || ev.metaKey)) { oils_lock_page(); } },false);
     box.onkeypress = function (event) {
         var root_node;
         var node = element;
@@ -1116,13 +1114,13 @@ function genToolTips () {
             )
         );
     
-        var i1_popup = createPopup({position : 'after_start', id : 't' + f.@tag + 'i1' });
+        var i1_popup = createMenuPopup({position : 'after_start', id : 't' + f.@tag + 'i1' });
         context_menus.appendChild( i1_popup );
     
-        var i2_popup = createPopup({position : 'after_start', id : 't' + f.@tag + 'i2' });
+        var i2_popup = createMenuPopup({position : 'after_start', id : 't' + f.@tag + 'i2' });
         context_menus.appendChild( i2_popup );
     
-        var sf_popup = createPopup({position : 'after_start', id : 't' + f.@tag + 'sf' });
+        var sf_popup = createMenuPopup({position : 'after_start', id : 't' + f.@tag + 'sf' });
         context_menus.appendChild( sf_popup );
     
         tooltip_hash['tag' + f.@tag] = f.description;
@@ -1497,7 +1495,7 @@ function getAuthorityContextMenu (target, sf) {
         auth_pages[menu_id] = 0;
     }
 
-    var sf_popup = createPopup({ id : menu_id, flex : 1 });
+    var sf_popup = createMenuPopup({ id : menu_id, flex : 1 });
 
     sf_popup.addEventListener("popuphiding", function(event) {
         if (show_auth_menu) {
@@ -2050,8 +2048,7 @@ function loadMarcEditor(pcrud, marcxml, target, sf) {
        To run in Firefox directly, must set signed.applets.codebase_principal_support
        to true in about:config
      */
-    netscape.security.PrivilegeManager.enablePrivilege('UniversalXPConnect');
-    win = window.open('/xul/server/cat/marcedit.xul'); // XXX version?
+    win = window.open('/xul/server/cat/marcedit.xul', '_blank', 'chrome'); // XXX version?
 
     // Match marc2are.pl last_xact_id format, roughly
     var now = new Date;

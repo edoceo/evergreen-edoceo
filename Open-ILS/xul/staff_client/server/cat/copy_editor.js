@@ -9,7 +9,6 @@ function my_init() {
         /******************************************************************************************************/
         /* setup JSAN and some initial libraries */
 
-        netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
         if (typeof JSAN == 'undefined') {
             throw( $('commonStrings').getString('common.jsan.missing') );
         }
@@ -26,13 +25,13 @@ function my_init() {
             $('non_unified_buttons').hidden = true;
         }
 
-        g.docid = xul_param('docid',{'modal_xulG':true});
-        g.handle_update = xul_param('handle_update',{'modal_xulG':true});
+        g.docid = xul_param('docid');
+        g.handle_update = xul_param('handle_update');
 
         /******************************************************************************************************/
         /* Get the copy ids from various sources and flesh them */
 
-        var copy_ids = xul_param('copy_ids',{'concat':true,'JSON2js_if_cgi':true,'JSON2js_if_xulG':true,'JSON2js_if_xpcom':true,'stash_name':'temp_copy_ids','clear_xpcom':true,'modal_xulG':true});
+        var copy_ids = xul_param('copy_ids',{'concat':true,'JSON2js_if_cgi':true,'JSON2js_if_xulG':true,'JSON2js_if_xpcom':true,'stash_name':'temp_copy_ids','clear_xpcom':true});
         if (!copy_ids) copy_ids = [];
 
         if (copy_ids.length > 0) g.copies = g.network.simple_request(
@@ -44,13 +43,13 @@ function my_init() {
         /* And other fleshed copies if any */
 
         if (!g.copies) g.copies = [];
-        var c = xul_param('copies',{'concat':true,'JSON2js_if_cgi':true,'JSON2js_if_xpcom':true,'stash_name':'temp_copies','clear_xpcom':true,'modal_xulG':true})
+        var c = xul_param('copies',{'concat':true,'JSON2js_if_cgi':true,'JSON2js_if_xpcom':true,'stash_name':'temp_copies','clear_xpcom':true})
         if (c) g.copies = g.copies.concat(c);
 
         /******************************************************************************************************/
         /* We try to retrieve callnumbers for existing copies, but for new copies, we rely on this */
 
-        g.callnumbers = xul_param('callnumbers',{'concat':true,'JSON2js_if_cgi':true,'JSON2js_if_xpcom':true,'stash_name':'temp_callnumbers','clear_xpcom':true,'modal_xulG':true});
+        g.callnumbers = xul_param('callnumbers',{'concat':true,'JSON2js_if_cgi':true,'JSON2js_if_xpcom':true,'stash_name':'temp_callnumbers','clear_xpcom':true});
 
         /******************************************************************************************************/
         /* Get preference (if it exists) for copy location label order */
@@ -72,7 +71,7 @@ function my_init() {
         /******************************************************************************************************/
         /* Is the interface an editor or a viewer, single or multi copy, existing copies or new copies? */
 
-        if (xul_param('edit',{'modal_xulG':true}) == '1') { 
+        if (xul_param('edit') == '1') { 
 
             g.edit = false;
 
@@ -431,7 +430,6 @@ g.delete_template = function() {
 
 g.export_templates = function() {
     try {
-        netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
         JSAN.use('util.file'); var f = new util.file('');
         f.export_file( { 'title' : $('catStrings').getString('staff.cat.copy_editor.export_templates.title'), 'data' : g.templates } );
     } catch(E) {
@@ -444,7 +442,6 @@ g.export_templates = function() {
 
 g.import_templates = function() {
     try {
-        netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
         JSAN.use('util.file'); var f = new util.file('');
         var temp = f.import_file( { 'title' : $('catStrings').getString('staff.cat.copy_editor.import_templates.title') } );
         if (temp) {
@@ -1468,7 +1465,6 @@ g.stash_and_close = function() {
         //g.data.temp_copies = js2JSON( g.copies );
         //g.data.stash('temp_copies');
         xulG.copies = g.copies;
-        update_modal_xulG(xulG);
         JSAN.use('util.widgets');
         util.widgets.dispatch('close',window);
     } catch(E) {

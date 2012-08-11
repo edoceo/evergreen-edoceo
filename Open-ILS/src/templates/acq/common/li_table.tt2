@@ -32,6 +32,8 @@
                                             <option mask='po' value='rollback_receive_po'>Un-Receive Purchase Order</option>
                                             <option mask='po' value='print_po'>Print Purchase Order</option>
                                             <option mask='po' value='po_history'>View PO History</option>
+                                            <option mask='po' value='batch_create_invoice'>[% l('Create Invoice From Selected Lineitems') %]</option>
+                                            <option mask='po' value='batch_link_invoice'>[% l('Link To Invoice for Selected Lineitems') %]</option>
                                         </select>
                                         <span id="acq-lit-export-attr-holder" class="hidden">
                                             <input dojoType="dijit.form.FilteringSelect" id="acq-lit-export-attr" jsId="acqLitExportAttrSelector" labelAttr="description" searchAttr="description" />
@@ -74,7 +76,7 @@
             <tbody id='acq-lit-tbody'>
                 <tr id='acq-lit-row' class='acq-lit-row'>
                     <td name='selector'><input type='checkbox' name='selectbox'/></td>
-                    <td style='width:75%;'>
+                    <td style='width:75%;' name='bib-info-cell'>
                         <table style='width:100%;'>
                             <tbody>
                                 <tr>
@@ -158,6 +160,10 @@
             <table style='width:100%'>
                 <tr>
                     <td class="acq-lit-li-menu-left">
+                        <span class='hidden' id='acq-lit-copies-back-to-invoice-button-wrapper'>
+                            <button dojoType='dijit.form.Button' id='acq-lit-copies-back-to-invoice-button' 
+                                scrollOnFocus='false'>[% l('&#x2196; Return To Invoice') %]</button>
+                        </span>
                         <div dojoType='dijit.form.Button' id='acq-lit-copies-back-button' scrollOnFocus='false'>&#x2196; Return</div>
                         <span style='margin-left:10px;padding-left:10px;border-left:2px solid #aaa;'>
                             Item Count: 

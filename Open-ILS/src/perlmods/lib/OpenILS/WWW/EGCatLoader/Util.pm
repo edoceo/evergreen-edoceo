@@ -523,7 +523,7 @@ sub load_search_filter_groups {
     for my $org_id (@$org_list) {
 
         my $grps;
-        if (!$cache{search_filter_groups}{$org_id}) {
+        if (! ($grps = $cache{search_filter_groups}{$org_id}) ) {
             $grps = $self->editor->search_actor_search_filter_group([
                 {owner => $org_id},
                 {   flesh => 2, 
@@ -535,7 +535,7 @@ sub load_search_filter_groups {
             ]);
             $cache{search_filter_groups}{$org_id} = $grps;
         }
-            
+
         # for the current context, if a descendant org has a group 
         # with a matching code replace the group from the parent.
         $seen{$_->code} = $_ for @$grps;
@@ -544,5 +544,25 @@ sub load_search_filter_groups {
     return $self->ctx->{search_filter_groups} = \%seen;
 }
 
+
+sub check_for_temp_list_warning {
+    my $self = shift;
+    my $ctx = $self->ctx;
+    my $cgi = $self->cgi;
+
+    my $lib = $self->_get_search_lib;
+    my $warn = ($ctx->{get_org_setting}->($lib || 1, 'opac.patron.temporary_list_warn')) ? 1 : 0;
+
+    if ($warn && $ctx->{user}) {
+        $self->_load_user_with_prefs;
+        my $map = $ctx->{user_setting_map};
+        $warn = 0 if ($$map{'opac.temporary_list_no_warn'});
+    }
+
+    # Check for a cookie disabling the warning.
+    $warn = 0 if ($warn && $cgi->cookie('no_temp_list_warn'));
+
+    return $warn;
+}
 
 1;
