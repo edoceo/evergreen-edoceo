@@ -142,6 +142,12 @@
                 value="&staff.patron_display.library_card.label;"/>
             <description id="patron_card" class="copyable card value click_link" onclick="try { copy_to_clipboard(event); } catch(E) { alert(E); }"/>
         </row>
+        <!-- Edoceo Stuff -->
+        <!-- uses existing lable from lang.dtd -->
+        <row>
+            <label id="PatronSummaryContact_guardian" value="&staff.patron.ue.parent_guardian.label;" />
+            <description class="click_link" />
+        </row>
         <row id="pdsgr1">
             <label id="PatronSummaryContact_ident_label" class="copyable text_left"
                 value="&staff.patron_display.ident1.label;"/>
