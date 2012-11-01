@@ -146,7 +146,7 @@
         <!-- uses existing lable from lang.dtd -->
         <row>
             <label id="PatronSummaryContact_guardian" value="&staff.patron.ue.parent_guardian.label;" />
-            <description class="click_link" />
+            <description id="patron_parent_guardian" class="" />
         </row>
         <row id="pdsgr1">
             <label id="PatronSummaryContact_ident_label" class="copyable text_left"
