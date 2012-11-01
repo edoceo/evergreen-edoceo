@@ -119,8 +119,8 @@
                 <!-- Edoceo Stuff -->
                 <!-- uses existing lable from lang.dtd -->
                 <row>
-                    <label id="PatronSummaryContact_guardian" value="&staff.patron.ue.parent_guardian.label;" />
-                    <description class="click_link" />
+                    <label id="PatronSummaryContact_guardian" onclick="alert(beer);" value="&staff.patron.ue.parent_guardian.label;" />
+                    <description id="patron_parent_guardian" class="" />
                 </row>
                 <row>
                     <label id="PatronSummaryContact_hold_alias_label" class="copyable text_left" value="&staff.patron_display.hold_alias.label;"/>
