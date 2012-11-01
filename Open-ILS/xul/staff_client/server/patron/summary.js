@@ -592,6 +592,14 @@ patron.summary.prototype = {
                             };
                         }
                     ],
+                    'patron_parent_guardian' : [
+                        ['render'],
+                        function(e) {
+                            return function() {
+                                util.widgets.set_text(e, obj.patron.ident_value2() );
+                            }
+                        }
+                    ],
                     'patron_hold_alias' : [
                         ['render'],
                         function(e) {
