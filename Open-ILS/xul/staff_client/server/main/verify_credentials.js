@@ -16,6 +16,16 @@ function verify_init() {
         XML_HTTP_SERVER = data.server_unadorned;
 
         JSAN.use('util.network'); var net = new util.network();
+        document.getElementById('password_prompt').addEventListener('keydown',
+            function(e) {
+                dump('Keydown: ' + e.keyCode);
+                if (e.keyCode == 13 || e.keyCode == 77) {
+                    var ex = document.createEvent('Event');
+                    ex.initEvent('command',true,true);
+                    document.getElementById('cmd_verify').dispatchEvent(ex);
+                }
+            }
+        );
         document.getElementById('cmd_verify').addEventListener(
             'command',
             function() {

@@ -22,6 +22,8 @@ var usingNewPl = false;
 function init() {
     dojo.byId('acq-pl-upload-ses').value = openils.User.authtoken;
 
+    loadYearSelector();
+
     new openils.widget.AutoFieldWidget({
         fmClass : 'acqpo',
         fmField : 'provider',
@@ -37,7 +39,10 @@ function init() {
         orgLimitPerms : ['CREATE_PICKLIST', 'CREATE_PURCHASE_ORDER'],
         parentNode : dojo.byId('acq-pl-upload-agency'),
     }).build(
-        function(w) { orderAgencyWidget = w }
+        function(w) { 
+            orderAgencyWidget = w 
+            dojo.connect(orderAgencyWidget, 'onChange', setDefaultFiscalYear);
+        }
     );
 
     vlAgent = new VLAgent();
@@ -54,6 +59,24 @@ function init() {
             }
         }
     );
+}
+
+function setDefaultFiscalYear(org) {
+    org = org || orderAgencyWidget.attr('value');
+
+    if (org) {
+
+        fieldmapper.standardRequest(
+            ['open-ils.acq', 'open-ils.acq.org_unit.current_fiscal_year'],
+            {   params : [openils.User.authtoken, org],
+                async : true,
+                oncomplete : function(r) {
+                    var year = openils.Util.readResponse(r);
+                    acqUploadYearSelector.attr('value', year);
+                }
+            }
+        );
+    }
 }
 
 function acqUploadRecords() {
@@ -104,7 +127,8 @@ function acqHandlePostUpload(key, plId) {
         ordering_agency : orderAgencyWidget.attr('value'),
         create_po : acqPlUploadCreatePo.attr('value'),
         activate_po : acqPlUploadActivatePo.attr('value'),
-        vandelay : vlAgent.values()
+        vandelay : vlAgent.values(),
+        fiscal_year : acqUploadYearSelector.attr('value')
     };
 
     fieldmapper.standardRequest(
@@ -160,6 +184,31 @@ function acqHandlePostUpload(key, plId) {
         }
     );
 }
+
+function loadYearSelector() {
+
+    fieldmapper.standardRequest(
+        ['open-ils.acq', 'open-ils.acq.fund.org.years.retrieve'],
+        {   async : true,
+            params : [openils.User.authtoken, {}, {limit_perm : 'VIEW_FUND'}],
+            oncomplete : function(r) {
+
+                var yearList = openils.Util.readResponse(r);
+                if(!yearList) return;
+                yearList = yearList.map(function(year){return {year:year+''};}); // dojo wants strings
+
+                var yearStore = {identifier:'year', name:'year', items:yearList};
+                yearStore.items = yearStore.items.sort().reverse();
+                acqUploadYearSelector.store = new dojo.data.ItemFileReadStore({data:yearStore});
+
+                // until an ordering agency is selected, default to the 
+                // fiscal year of the workstation
+                setDefaultFiscalYear(new openils.User().user.ws_ou());
+            }
+        }
+    );
+}
+
 
 
 openils.Util.addOnLoad(init);

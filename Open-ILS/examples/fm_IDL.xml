@@ -5048,7 +5048,8 @@ SELECT  usr,
 			TRIM(acnp.label || ' ' || acn.label || ' ' || acns.label)
 				AS call_number_label,
 			siss.label AS issuance_label,
-			(ahr.usr <> ahr.requestor) AS is_staff_hold
+			(ahr.usr <> ahr.requestor) AS is_staff_hold,
+			ahcm_1.copy_count AS potential_copies
 		FROM action.hold_request ahr
 		JOIN asset.copy acp ON (acp.id = ahr.current_copy)
 		JOIN asset.call_number acn ON (acp.call_number = acn.id)
@@ -5071,6 +5072,11 @@ SELECT  usr,
 					)
 				)
 			)
+		JOIN (
+			SELECT COUNT(target_copy) AS copy_count, hold
+			FROM action.hold_copy_map
+			GROUP BY 2
+		) ahcm_1 ON (ahcm_1.hold = ahr.id)
 		LEFT JOIN serial.issuance siss
 			ON (ahr.hold_type = 'I' AND siss.id = ahr.target)
 		LEFT JOIN asset.copy_location_order acplo
@@ -5128,6 +5134,7 @@ SELECT  usr,
 			<field reporter:label="Call Number Label" name="call_number_label" reporter:datatype="text" />
 			<field reporter:label="Issuance Label" name="issuance_label" reporter:datatype="text" />
 			<field reporter:label="Is Staff Hold?" name="is_staff_hold" reporter:datatype="bool" />
+			<field reporter:label="Potential Copies" name="potential_copies" reporter:datatype="int" />
 		</fields>
 		<links>
 			<link field="fulfillment_lib" reltype="has_a" key="id" map="" class="aou"/>
@@ -7003,7 +7010,7 @@ SELECT  usr,
 		</links>
 	</class>
 
-	<class id="acqfc" controller="open-ils.cstore" oils_obj:fieldmapper="acq::fiscal_calendar" oils_persist:tablename="acq.fiscal_calendar" reporter:label="Fiscal Calendar">
+	<class id="acqfc" controller="open-ils.cstore open-ils.pcrud" oils_obj:fieldmapper="acq::fiscal_calendar" oils_persist:tablename="acq.fiscal_calendar" reporter:label="Fiscal Calendar">
 		<fields oils_persist:primary="id" oils_persist:sequence="acq.fiscal_calendar_id_seq">
 			<field reporter:label="Fiscal Calendar ID" name="id" reporter:datatype="id" reporter:selector='name'/>
 			<field reporter:label="Fiscal Calendar Name" name="name" reporter:datatype="text"/>
@@ -7012,21 +7019,17 @@ SELECT  usr,
 		<links>
             <link field="years" reltype="has_many" map="" key="calendar" class="acqfy"/>
 		</links>
-		<!--
-			For now, we don't have pcrud as one of the controllers, so the permacrud section is moot.
-			But here's what it should look like if we ever do use pcrud.
-		-->
 		<permacrud xmlns="http://open-ils.org/spec/opensrf/IDL/permacrud/v1">
 			<actions>
 				<create permission="ADMIN_ACQ_FISCAL_YEAR" global_required="true"/>
-				<retrieve permission="ADMIN_ACQ_FISCAL_YEAR" global_required="true"/>
+				<retrieve permission="STAFF_LOGIN" global_required="true"/>
 				<update permission="ADMIN_ACQ_FISCAL_YEAR" global_required="true"/>
 				<delete permission="ADMIN_ACQ_FISCAL_YEAR" global_required="true"/>
 			</actions>
 		</permacrud>
 	</class>
 
-	<class id="acqfy" controller="open-ils.cstore" oils_obj:fieldmapper="acq::fiscal_year" oils_persist:tablename="acq.fiscal_year" reporter:label="Fiscal Year">
+	<class id="acqfy" controller="open-ils.cstore open-ils.pcrud" oils_obj:fieldmapper="acq::fiscal_year" oils_persist:tablename="acq.fiscal_year" reporter:label="Fiscal Year">
 		<fields oils_persist:primary="id" oils_persist:sequence="acq.fiscal_year_id_seq">
 			<field reporter:label="Fiscal Year ID" name="id" reporter:datatype="id" reporter:selector='year'/>
 			<field reporter:label="Calendar" name="calendar" reporter:datatype="link"/>
@@ -7037,14 +7040,10 @@ SELECT  usr,
 		<links>
 			<link field="calendar" reltype="has_a" key="id" map="" class="acqfc"/>
 		</links>
-		<!--
-			For now, we don't have pcrud as one of the controllers, so the permacrud section is moot.
-			But here's what it should look like if we ever do use pcrud.
-		-->
 		<permacrud xmlns="http://open-ils.org/spec/opensrf/IDL/permacrud/v1">
 			<actions>
 				<create permission="ADMIN_ACQ_FISCAL_YEAR" global_required="true"/>
-				<retrieve permission="ADMIN_ACQ_FISCAL_YEAR" global_required="true"/>
+				<retrieve permission="STAFF_LOGIN" global_required="true"/>
 				<update permission="ADMIN_ACQ_FISCAL_YEAR" global_required="true"/>
 				<delete permission="ADMIN_ACQ_FISCAL_YEAR" global_required="true"/>
 			</actions>

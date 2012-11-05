@@ -354,7 +354,7 @@ sub prepare_browse_call_numbers {
     my $cn = ($self->cgi->param("cn") || $self->any_call_number_label) or
         return [];
 
-    my $org_unit = $self->ctx->{get_aou}->($self->cgi->param('loc')) ||
+    my $org_unit = $self->ctx->{get_aou}->($self->_get_search_lib()) ||
         $self->ctx->{aou_tree}->();
 
     my $supercat = create OpenSRF::AppSession("open-ils.supercat");
@@ -433,20 +433,40 @@ sub added_content_stage1 {
     my $key = $self->get_ac_key($rec_id);
     ($key = $key->{value}) =~ s/^\s+//g if $key;
 
+    # Connect to this machine's IP address, using the same 
+    # Host with which our caller used to connect to us.
+    # This avoids us having to route out of the cluster 
+    # and back in to reach the top-level virtualhost.
+    my $ac_addr = $ENV{SERVER_ADDR};
+    my $ac_host = $self->apache->hostname;
+    my $ac_failed = 0;
+
+    $logger->info("tpac: added content connecting to $ac_addr / $ac_host");
+
     $ctx->{added_content} = {};
     for my $type (@$ac_types) {
+        last if $ac_failed;
         $ctx->{added_content}->{$type} = {content => ''};
         $ctx->{added_content}->{$type}->{status} = $key ? 3 : 2;
 
         if ($key) {
             $logger->debug("tpac: starting added content request for $key => $type");
 
-            my $req = Net::HTTP::NB->new(Host => $self->apache->hostname);
+            # Net::HTTP::NB is non-blocking /after/ the initial connect()
+            # Passing Timeout=>1 ensures we wait no longer than 1 second to 
+            # connect to the local Evergreen instance (i.e. ourself).  
+            # Connecting to oneself should either be very fast (normal) 
+            # or very slow (routing problems).
 
+            my $req = Net::HTTP::NB->new(Host => $ac_addr, Timeout => 1);
             if (!$req) {
-                $logger->warn("Unable to fetch added content from " . $self->apache->hostname . ": $@");
+                $logger->warn("Unable to connect to $ac_addr / $ac_host".
+                    " for added content lookup for $key: $@");
+                $ac_failed = 1;
                 next;
             }
+
+            $req->host($self->apache->hostname);
 
             my $http_type = ($type eq $sel_type) ? 'GET' : 'HEAD';
             $req->write_request($http_type => "/opac/extras/ac/$type/html/" . uri_escape($key));

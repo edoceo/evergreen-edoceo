@@ -59,11 +59,14 @@
                                                         <em><a title="[% l("Perform an Author Search") %]"
                                                                 name='item_author'
                                                                 href="[%- 
-                                                                    authorquery = attrs.author | replace('[,\.:;]', '');
+                                                                    authorquery = attrs.author | replace('[#"^$\+\-,\.:;&|\[\]()]', '');
                                                                     mkurl(ctx.opac_root _ '/results', {qtype => 'author', query => authorquery}, ['page'])
                                                                     -%]">[% attrs.author | html %]</a></em>
-                                                        &nbsp;&nbsp;
-                                                        [% attrs.pubdate | html %]
+                                                                    [%- UNLESS CGI.param('detail_record_view')
+                                                                        OR (show_more_details.default == 'true'
+                                                                        OR show_more_details.default == 'hide')
+                                                                    %] [% attrs.pubdate | html %]
+                                                                    [%- END -%]
                                                     </div>
                                                     <table cellpadding="0" cellspacing="0" border="0"
                                                         class="results_info_table">
@@ -79,12 +82,12 @@
                                                         [% IF CGI.param('detail_record_view') %]
                                                         <!-- These fields are visible when viewing the results page in 'detailed' mode -->
 
-                                                        [% IF attrs.publisher %]
+                                                        [% IF attrs.pubinfo %]
                                                             <tr name="results_pub_tr">
                                                                 <td valign="top">
                                                                     <strong>[% l('Publisher:') %]</strong>
                                                                 </td>
-                                                                <td>[% attrs.publisher | html %]</td>
+                                                                <td>[% attrs.pubinfo | html %]</td>
                                                             </tr>
                                                         [% END %]
                                                         [% IF attrs.isbns.size > 0 %]
@@ -95,6 +98,14 @@
                                                                 <td>[% attrs.isbns.0 | html %]</td>
                                                             </tr>
                                                         [% END %]
+                                                        [%- IF attrs.issns.size > 0 %]
+                                                            <tr name="results_issn_tr">
+                                                                <td valign="top">
+                                                                    <strong>[% l('ISSN:') %]</strong>
+                                                                </td>
+                                                                <td>[% attrs.issns.0 | html %]</td>
+                                                            </tr>
+                                                        [%- END %]
                                                         [%- IF openurl.enabled == 'true';
                                                             FOREACH issn IN args.issns;
                                                                 NEXT IF issn == '';
@@ -217,8 +228,9 @@
                                                 <div class="result_table_utils_cont">
                                                     <div class="result_table_utils">
 [%- search_ou = ctx.search_ou;
+    num_holdable_copies = attrs.marc_xml.findnodes('//*[local-name()="holdings" and @has_holdable="true"]').size || 0;
     IF ctx.place_unfillable ||
-        ( attrs.marc_xml.findnodes('//*[local-name()="holdings" and @has_holdable="true"]').size > 0
+        ( num_holdable_copies > 0
             && (ctx.holds_block.enabled != 'true' || attrs.org_copy_counts.$search_ou.available == 0)
         )
 %]

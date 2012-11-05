@@ -4910,12 +4910,16 @@ char* SELECT (
 
 	if( limit ){
 		const char* str = jsonObjectGetString( limit );
-		buffer_fadd( sql_buf, " LIMIT %d", atoi( str ));
+		if (str) { // limit could be JSON_NULL, etc.
+			buffer_fadd( sql_buf, " LIMIT %d", atoi( str ));
+		}
 	}
 
 	if( offset ) {
 		const char* str = jsonObjectGetString( offset );
-		buffer_fadd( sql_buf, " OFFSET %d", atoi( str ));
+		if (str) {
+			buffer_fadd( sql_buf, " OFFSET %d", atoi( str ));
+		}
 	}
 
 	if( !(flags & SUBSELECT) )
@@ -5453,21 +5457,25 @@ static char* buildSELECT ( const jsonObject* search_hash, jsonObject* rest_of_qu
 		const jsonObject* limit = jsonObjectGetKeyConst( rest_of_query, "limit" );
 		if( limit ) {
 			const char* str = jsonObjectGetString( limit );
-			buffer_fadd(
-				sql_buf,
-				" LIMIT %d",
-				atoi(str)
-			);
+			if (str) {
+				buffer_fadd(
+					sql_buf,
+					" LIMIT %d",
+					atoi(str)
+				);
+			}
 		}
 
 		const jsonObject* offset = jsonObjectGetKeyConst( rest_of_query, "offset" );
 		if( offset ) {
 			const char* str = jsonObjectGetString( offset );
-			buffer_fadd(
-				sql_buf,
-				" OFFSET %d",
-				atoi( str )
-			);
+			if (str) {
+				buffer_fadd(
+					sql_buf,
+					" OFFSET %d",
+					atoi( str )
+				);
+			}
 		}
 	}
 
@@ -6428,10 +6436,10 @@ static jsonObject* oilsMakeFieldmapperFromResult( dbi_result result, osrfHash* m
 						strftime( dt_string, sizeof( dt_string ), "%T", &gmdt );
 					} else if( !( attr & DBI_DATETIME_TIME )) {
 						localtime_r( &_tmp_dt, &gmdt );
-						strftime( dt_string, sizeof( dt_string ), "%F", &gmdt );
+						strftime( dt_string, sizeof( dt_string ), "%04Y-%m-%d", &gmdt );
 					} else {
 						localtime_r( &_tmp_dt, &gmdt );
-						strftime( dt_string, sizeof( dt_string ), "%FT%T%z", &gmdt );
+						strftime( dt_string, sizeof( dt_string ), "%04Y-%m-%dT%T%z", &gmdt );
 					}
 
 					jsonObjectSetIndex( object, fmIndex, jsonNewObject( dt_string ));
@@ -6514,10 +6522,10 @@ static jsonObject* oilsMakeJSONFromResult( dbi_result result ) {
 						strftime( dt_string, sizeof( dt_string ), "%T", &gmdt );
 					} else if( !( attr & DBI_DATETIME_TIME )) {
 						localtime_r( &_tmp_dt, &gmdt );
-						strftime( dt_string, sizeof( dt_string ), "%F", &gmdt );
+						strftime( dt_string, sizeof( dt_string ), "%04Y-%m-%d", &gmdt );
 					} else {
 						localtime_r( &_tmp_dt, &gmdt );
-						strftime( dt_string, sizeof( dt_string ), "%FT%T%z", &gmdt );
+						strftime( dt_string, sizeof( dt_string ), "%04Y-%m-%dT%T%z", &gmdt );
 					}
 
 					jsonObjectSetKey( object, columnName, jsonNewObject( dt_string ));
@@ -7230,9 +7238,9 @@ int writeAuditInfo( osrfMethodContext* ctx, const char* user_id, const char* ws_
 			return -1;
 		} else {
 			dbi_result_free( result );
-			return 0;
 		}
 	}
+	return 0;
 }
 
 /*@}*/

@@ -26,8 +26,7 @@ sub _prepare_biblio_search_basics {
         next unless $query =~ /\S/;
 
         # Hack for journal title
-        my $q = $qtype;
-        if ($q eq 'jtitle') {
+        if ($qtype eq 'jtitle') {
             $qtype = 'title';
         }
 
@@ -44,13 +43,13 @@ sub _prepare_biblio_search_basics {
         } elsif ($contains eq 'exact') {
             $query =~ s/[\^\$]//g;
             $query = '^' . $query . '$';
+        } elsif ($contains eq 'starts') {
+            $query =~ s/"//g;
+            $query =~ s/[\^\$]//g;
+            $query = '^' . $query;
+            $query = ('"' . $query . '"') if index $query, ' ';
         }
         $query = "$qtype:$query" unless $qtype eq 'keyword' and $i == 0;
-
-        # Hack for journal title - completed!
-        if ($q eq 'jtitle') {
-            $query = "bib_level:s $query";
-        }
 
         $bool = ($bool and $bool eq 'or') ? '||' : '&&';
         $full_query = $full_query ? "($full_query $bool $query)" : $query;
@@ -89,6 +88,11 @@ sub _prepare_biblio_search {
 
     if ($cgi->param("bookbag")) {
         $query .= " container(bre,bookbag," . int($cgi->param("bookbag")) . ")";
+    }
+
+    # Journal title hackery complete
+    if ($cgi->param("qtype") && $cgi->param("qtype") eq "jtitle") {
+        $query .= " bib_level(s)";
     }
 
     if ($cgi->param('pubdate') && $cgi->param('date1')) {
@@ -323,7 +327,7 @@ sub load_rresults {
         return $self->marc_expert_search(%args) if scalar($cgi->param("tag"));
         $self->timelog("Calling item barcode search");
         return $self->item_barcode_shortcut if (
-            $cgi->param("qtype") and ($cgi->param("qtype") eq "item_barcode")
+            $cgi->param("qtype") and ($cgi->param("qtype") eq "item_barcode") and not $internal
         );
         $self->timelog("Calling call number browse");
         return $self->call_number_browse_standalone if (
@@ -514,8 +518,8 @@ sub check_1hit_redirect {
 
     my $base_url = sprintf(
         '%s://%s%s/record/%s',
-        ($ctx->{is_staff} ? 'oils' : $ctx->{proto}),
-        ($ctx->{is_staff} ? 'remote' : $self->apache->hostname),
+        $self->ctx->{proto},
+        $self->ctx->{hostname},
         $self->ctx->{opac_root},
         $$rec_ids[0],
     );
@@ -574,10 +578,15 @@ sub item_barcode_shortcut {
         );
         $self->timelog("Returned from calling get_records_and_facets() for item_barcode");
 
+        my $stat = $self->check_1hit_redirect($rec_ids);
+        return $stat if $stat;
+
         $self->ctx->{records} = [@data];
         $self->ctx->{search_facets} = {};
         $self->ctx->{hit_count} = scalar @data;
         $self->ctx->{page_size} = $self->ctx->{hit_count};
+        # load temporary_list settings for user and ou:
+        $self->_load_lists_and_settings if ($self->ctx->{user});
 
         return Apache2::Const::OK;
     } {
@@ -673,6 +682,9 @@ sub marc_expert_search {
     );
     $self->timelog("Returned from calling get_records_and_facets() for MARC expert");
 
+    # load temporary_list settings for user and ou:
+    $self->_load_lists_and_settings if ($self->ctx->{user});
+
     $self->ctx->{records} = [@data];
 
     return Apache2::Const::OK;
@@ -683,12 +695,13 @@ sub call_number_browse_standalone {
 
     if (my $cnfrag = $self->cgi->param("query")) {
         my $url = sprintf(
-            'http%s://%s%s/cnbrowse?cn=%s',
-            $self->cgi->https ? "s" : "",
-            $self->apache->hostname,
+            '%s://%s%s/cnbrowse?cn=%s',
+            $self->ctx->{proto},
+            $self->ctx->{hostname},
             $self->ctx->{opac_root},
             $cnfrag # XXX some kind of escaping needed here?
         );
+        $url .= '&locg=' . $self->_get_search_lib() if ($self->_get_search_lib());
         return $self->generic_redirect($url);
     } else {
         return $self->generic_redirect; # return to search page

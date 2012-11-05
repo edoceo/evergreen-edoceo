@@ -567,6 +567,7 @@
                 .getService(Components.interfaces.nsIClipboardHelper);
             gClipboardHelper.copyString(text);
             var Strings = $('offlineStrings') || $('commonStrings');
+            // alert(Strings.getFormattedString('openils.global_util.clipboard', [text]));
         } catch(E) {
             var Strings = $('offlineStrings') || $('commonStrings');
             alert(Strings.getFormattedString('openils.global_util.clipboard.error', [E]));    
@@ -595,7 +596,7 @@
         if(base_url) {
             base_url = base_url[0];
             if(urls[base_url])
-                url = url.replace(/^[^?/|]+\|/, urls[base_url]);
+                url = url.replace(/^[^?/|]+\|?/, urls[base_url]);
         }
         if (url.match(/^\//)) url = urls.remote + url;
         if (! url.match(/^(http|https|chrome|oils):\/\//) && ! url.match(/^data:/) ) url = 'http://' + url;

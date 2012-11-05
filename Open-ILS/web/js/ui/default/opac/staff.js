@@ -19,6 +19,13 @@ function staff_hold_usr_input_disabler(input) {
         Boolean(Number(input.value));
     staff_hold_usr_barcode_changed();
 }
+function no_hold_submit(event) {
+    if (event.which == 13) {
+        staff_hold_usr_barcode_changed();
+        return false;
+    }
+    return true;
+}
 var cur_hold_barcode = undefined;
 function staff_hold_usr_barcode_changed(isload) {
     if(typeof xulG != 'undefined' && xulG.get_barcode_and_settings) {
@@ -62,6 +69,13 @@ function staff_hold_usr_barcode_changed(isload) {
         for(var i in update_elements) update_elements[i].value = load_info.settings['opac.default_sms_notify'];
         update_elements = document.getElementsByName('sms_carrier');
         for(var i in update_elements) update_elements[i].value = load_info.settings['opac.default_sms_carrier'];
+        update_elements = document.getElementsByName('email_notify');
+        for(var i in update_elements) {
+            update_elements[i].disabled = (load_info.user_email ? false : true);
+            if(update_elements[i].disabled) update_elements[i].checked = false;
+        }
+        update_elements = document.getElementsByName('email_address');
+        for(var i in update_elements) update_elements[i].textContent = load_info.user_email;
     }
 }
 window.onload = function() {

@@ -144,6 +144,7 @@ sub load_context {
     $ctx->{skin} = $cgi->cookie(OILS_HTTP_COOKIE_SKIN) || 'default';
     $ctx->{theme} = $cgi->cookie(OILS_HTTP_COOKIE_THEME) || 'default';
     $ctx->{proto} = $cgi->https ? 'https' : 'http';
+    my $default_locale = $r->dir_config('OILSWebDefaultLocale') || 'en_us';
 
     my @template_paths = uniq $r->dir_config->get('OILSWebTemplatePath');
     $ctx->{template_paths} = [ reverse @template_paths ];
@@ -154,7 +155,7 @@ sub load_context {
     $ctx->{locales} = \%registered_locales;
 
     # Set a locale cookie if the requested locale is valid
-    my $set_locale = $cgi->param('set_eg_locale');
+    my $set_locale = $cgi->param('set_eg_locale') || '';
     if (!(grep {$_ eq $set_locale} keys %registered_locales)) {
         $set_locale = '';
     } else {
@@ -167,8 +168,11 @@ sub load_context {
     }
 
     $ctx->{locale} = $set_locale ||
-        $cgi->cookie(OILS_HTTP_COOKIE_LOCALE) || 
-        parse_accept_lang($r->headers_in->get('Accept-Language')) || 'en_us';
+        $cgi->cookie(OILS_HTTP_COOKIE_LOCALE) || $default_locale ||
+        parse_accept_lang($r->headers_in->get('Accept-Language'));
+
+    # set the editor default locale for each page load
+    $OpenILS::Utils::CStoreEditor::default_locale = parse_eg_locale($ctx->{locale});
 
     my $mprefix = $ctx->{media_prefix};
     if($mprefix and $mprefix !~ /^http/ and $mprefix !~ /^\//) {
@@ -179,7 +183,7 @@ sub load_context {
     return $ctx;
 }
 
-# turn Accept-Language into sometihng EG can understand
+# turn Accept-Language into something EG can understand
 # TODO: try all langs, not just the first
 sub parse_accept_lang {
     my $al = shift;
@@ -189,6 +193,18 @@ sub parse_accept_lang {
     return undef unless $locale;
     $locale =~ s/-/_/og;
     return $locale;
+}
+
+# Accept-Language uses locales like 'en', 'fr', 'fr_fr', while Evergreen
+# internally uses 'en-US', 'fr-CA', 'fr-FR' (always with the 2 lowercase,
+# hyphen, 2 uppercase convention)
+sub parse_eg_locale {
+    my $ua_locale = shift || 'en_us';
+
+    $ua_locale =~ m/^(..).?(..)?$/;
+    my $lang_code = lc($1);
+    my $region_code = $2 ? uc($2) : uc($1);
+    return "$lang_code-$region_code";
 }
 
 # Given a URI, finds the configured template and any extra page 

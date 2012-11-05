@@ -146,8 +146,9 @@ sub load {
         # when they're already logged in.
         return $self->generic_redirect(
             sprintf(
-                "https://%s%s/myopac/main",
-                $self->apache->hostname, $self->ctx->{opac_root}
+                "%s://%s%s/myopac/main",
+                $self->ctx->{proto},
+                $self->ctx->{hostname}, $self->ctx->{opac_root}
             )
         );
     }
@@ -202,7 +203,7 @@ sub load {
 # -----------------------------------------------------------------------------
 sub redirect_ssl {
     my $self = shift;
-    my $new_page = sprintf('https://%s%s', $self->apache->hostname, $self->apache->unparsed_uri);
+    my $new_page = sprintf('%s://%s%s', ($self->ctx->{is_staff} ? 'oils' : 'https'), $self->ctx->{hostname}, $self->apache->unparsed_uri);
     return $self->generic_redirect($new_page);
 }
 
@@ -212,7 +213,7 @@ sub redirect_ssl {
 # -----------------------------------------------------------------------------
 sub redirect_auth {
     my $self = shift;
-    my $login_page = sprintf('https://%s%s/login', $self->apache->hostname, $self->ctx->{opac_root});
+    my $login_page = sprintf('%s://%s%s/login',($self->ctx->{is_staff} ? 'oils' : 'https'), $self->ctx->{hostname}, $self->ctx->{opac_root});
     my $redirect_to = uri_escape($self->apache->unparsed_uri);
     return $self->generic_redirect("$login_page?redirect_to=$redirect_to");
 }
@@ -247,13 +248,15 @@ sub load_common {
     $ctx->{full_path} = $ctx->{base_path} . $self->cgi->path_info;
     $ctx->{unparsed_uri} = $self->apache->unparsed_uri;
     $ctx->{opac_root} = $ctx->{base_path} . "/opac"; # absolute base url
-    $ctx->{is_staff} = ($self->apache->headers_in->get('OILS-Wrapper') =~ /true/);
+    my $oils_wrapper = $self->apache->headers_in->get('OILS-Wrapper') || '';
+    $ctx->{is_staff} = ($oils_wrapper =~ /true/);
     $ctx->{proto} = 'oils' if $ctx->{is_staff};
+    $ctx->{hostname} = 'remote' if $ctx->{is_staff};
     $ctx->{physical_loc} = $self->get_physical_loc;
 
     # capture some commonly accessed pages
-    $ctx->{home_page} = 'http://' . $self->apache->hostname . $self->ctx->{opac_root} . "/home";
-    $ctx->{logout_page} = 'https://' . $self->apache->hostname . $self->ctx->{opac_root} . "/logout";
+    $ctx->{home_page} = $ctx->{proto} . '://' . $ctx->{hostname} . $self->ctx->{opac_root} . "/home";
+    $ctx->{logout_page} = ($ctx->{proto} eq 'http' ? 'https' : $ctx->{proto} ) . '://' . $ctx->{hostname} . $self->ctx->{opac_root} . "/logout";
 
     if($e->authtoken($self->cgi->cookie(COOKIE_SES))) {
 
@@ -315,8 +318,11 @@ sub staff_saved_searches_set_expansion_state {
 
 # physical_loc (i.e. "original location") passed in as a URL 
 # param will replace any existing physical_loc stored as a cookie.
+# If specified via ENV that rules over all and we don't set cookies.
 sub get_physical_loc {
     my $self = shift;
+
+    return $ENV{physical_loc} if($ENV{physical_loc});
 
     if(my $physical_loc = $self->cgi->param('physical_loc')) {
         $self->apache->headers_out->add(

@@ -13,7 +13,8 @@ export CLOSURE_COMPILER_JAR = ~/closure-compiler/compiler.jar
 # XULRunner is our base.
 XULRUNNER_VERSION=14.0.1
 XULRUNNER_WINFILE=xulrunner-$(XULRUNNER_VERSION).en-US.win32.zip
-XULRUNNER_LINUXFILE=xulrunner-$(XULRUNNER_VERSION).en-US.linux-i686.tar.bz2
+XULRUNNER_LINUX32FILE=xulrunner-$(XULRUNNER_VERSION).en-US.linux-i686.tar.bz2
+XULRUNNER_LINUX64FILE=xulrunner-$(XULRUNNER_VERSION).en-US.linux-x86_64.tar.bz2
 XULRUNNER_URL=ftp://ftp.mozilla.org/pub/mozilla.org/xulrunner/releases/$(XULRUNNER_VERSION)/runtimes/
 XULRUNNER_MAJOR_VERSION=$$(echo ${XULRUNNER_VERSION} | cut -d. -f1)
 
@@ -135,8 +136,8 @@ stamp:
 	@/bin/date +"%Y%m%d.%H%M%S" > build/BUILD_ID
 	@if [ -n "${STAFF_CLIENT_BUILD_ID}" ]; then ( echo "Stamping with Build ID: ${STAFF_CLIENT_BUILD_ID}" ; echo ${STAFF_CLIENT_BUILD_ID} > build/BUILD_ID ) ; fi
 	@if [ -z "${STAFF_CLIENT_BUILD_ID}" ]; then ( echo "No Build ID for versioning" ; echo "none" > build/BUILD_ID ) ; fi
-	@sed -n -e '1 s/^.* \([^ ]*\)$$/\1/p' @top_srcdir@/README > build/VERSION
-	@if [ "${STAFF_CLIENT_VERSION}" == "master" ]; then echo "0${GIT_BRANCH}.${GIT_TAG}" > build/VERSION; fi 
+	@sed -n -e 's/^AC_INIT([^,]*, \([^,]*\),.*$$/\1/p' @top_srcdir@/configure.ac > build/VERSION
+	@if [ "${STAFF_CLIENT_VERSION}" == "trunk" ]; then echo "0${GIT_BRANCH}.${GIT_TAG}" > build/VERSION; fi 
 	@if [ -n "${STAFF_CLIENT_VERSION}" ]; then ( echo "Stamping with Version: ${STAFF_CLIENT_VERSION}" ; echo ${STAFF_CLIENT_VERSION} > build/VERSION ) ; fi
 	@if [ -z "${STAFF_CLIENT_VERSION}" ]; then ( echo "No Version" ; echo "none" > build/VERSION ) ; fi
 	@sed -e 's/\./_/g' -e 's/^\([0-9_]*\)$$/rel_&/' build/VERSION > build/STAMP_ID
@@ -159,6 +160,8 @@ stamp:
 	@if [ -n "${AUTOUPDATE_HOST}" ]; then echo "Applying automatic update host ${AUTOUPDATE_HOST}"; fi
 	@if [ -n "${AUTOUPDATE_HOST}" ]; then sed -i -e "s|::HOSTNAME::|${AUTOUPDATE_HOST}|" -e "s|https\?://\(https\?://\)|\1|" build/defaults/preferences/autoupdate.js; fi
 	@if [ -n "${AUTOUPDATE_HOST}" ]; then sed -i -e "s|::HOSTNAME::|${AUTOUPDATE_HOST}|" -e "s|https\?://\(https\?://\)|\1|" build/install.rdf; fi
+	@if [ -z "${INITIAL_HOST}" ]; then rm -f build/defaults/preferences/initialhost.js; fi
+	@if [ -n "${INITIAL_HOST}" ]; then sed -i -e "s/%INITIAL_HOST%/${INITIAL_HOST}/" build/defaults/preferences/initialhost.js; fi
 	@cp build/STAMP_ID PREV_STAMP_ID
 	@cp build/VERSION PREV_VERSION
 
@@ -212,7 +215,8 @@ compress-javascript: build
 
 clients:
 	@make win-client
-	@make linux-client
+	@make linux32-client
+	@make linux64-client
 	@make generic-client
 
 # By doing this we don't change the original build in the build folder
@@ -334,14 +338,26 @@ win-xulrunner: unzip_check branding_check client_app
 	@if [ ${XULRUNNER_MAJOR_VERSION} -ge 4 -a -f client/xulrunner/mozcrt19.dll ]; then cp client/xulrunner/mozcrt19.dll client/; fi # XULRunner 4+ need this, if the file exists
 	@if [ ${XULRUNNER_MAJOR_VERSION} -ge 9 -a -f client/xulrunner/mozutils.dll ]; then cp client/xulrunner/mozutils.dll client/; fi # XULRunner 9+ need this, if the file exists
 
-linux-xulrunner: client_app
-	@echo 'Preparing Linux xulrunner'
-	@if [ ! -f ${XULRUNNER_LINUXFILE} ]; then wget ${XULRUNNER_URL}${XULRUNNER_LINUXFILE}; fi
-	@cd client; tar xjf ../${XULRUNNER_LINUXFILE}; cd ..
+linux32-xulrunner: client_app
+	@echo 'Preparing Linux (32 bit) xulrunner'
+	@if [ ! -f ${XULRUNNER_LINUX32FILE} ]; then wget ${XULRUNNER_URL}${XULRUNNER_LINUX32FILE}; fi
+	@cd client; tar xjf ../${XULRUNNER_LINUX32FILE}; cd ..
 	@if [ -f client/defaults/preferences/autoupdate.js ]; then echo 'pref("app.update.channel","lin");' >> client/defaults/preferences/autochannel.js; fi;
 	@if [ -d branding_lin ]; then cp -fR branding_lin/* client/; fi
 	@echo 'Preparing stub'
 	@mv client/xulrunner/xulrunner-stub client/evergreen
+
+linux64-xulrunner: client_app
+	@echo 'Preparing Linux (64 bit) xulrunner'
+	@if [ ! -f ${XULRUNNER_LINUX64FILE} ]; then wget ${XULRUNNER_URL}${XULRUNNER_LINUX64FILE}; fi
+	@cd client; tar xjf ../${XULRUNNER_LINUX64FILE}; cd ..
+	@if [ -f client/defaults/preferences/autoupdate.js ]; then echo 'pref("app.update.channel","lin64");' >> client/defaults/preferences/autochannel.js; fi;
+# Note: We assume that we want 32 bit branding files, but provide a way to override for 64 bit
+	@if [ -d branding_lin ]; then cp -fR branding_lin/* client/; fi
+	@if [ -d branding_lin64 ]; then cp -fR branding_lin64/* client/; fi
+	@echo 'Preparing stub'
+	@mv client/xulrunner/xulrunner-stub client/evergreen
+
 
 # Build a windows installer.
 
@@ -353,15 +369,21 @@ win-client: nsis_check win-xulrunner
 
 # For linux, just build a tar.bz2 archive
 
-linux-client: linux-xulrunner
-	@echo 'Packing as evergreen_staff_client.tar.bz2'
-	@rm -f evergreen_staff_client.tar.bz2
-	@cd client; tar cjf ../evergreen_staff_client.tar.bz2 *; cd ..
+linux32-client: linux32-xulrunner
+	@echo 'Packing as evergreen_staff_client_i686.tar.bz2'
+	@rm -f evergreen_staff_client_i686.tar.bz2
+	@cd client; tar cjf ../evergreen_staff_client_i686.tar.bz2 *; cd ..
+	@echo 'Done'
+
+linux64-client: linux64-xulrunner
+	@echo 'Packing as evergreen_staff_client_x86_64.tar.bz2'
+	@rm -f evergreen_staff_client_x86_64.tar.bz2
+	@cd client; tar cjf ../evergreen_staff_client_x86_64.tar.bz2 *; cd ..
 	@echo 'Done'
 
 # For running the updates script with the correct updates directory, optionally building clients as well
 
-updates updates-client win-updates win-updates-client linux-updates linux-updates-client generic-updates generic-updates-client extension-updates:
+updates updates-client win-updates win-updates-client linux32-updates linux32-updates-client linux64-updates linux64-updates-client generic-updates generic-updates-client extension-updates:
 	@if [ ! -f build/BUILD_ID ]; then echo 'ERROR! Current build not stamped!'; exit 1; fi
 	@if [ ! -x external/make_updates.sh ]; then chmod u+x external/make_updates.sh; fi
 	@if [ ! -x external/make_updates.sh ]; then echo 'ERROR! external/make_updates.sh is not executable!'; exit 1; fi

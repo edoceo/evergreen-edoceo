@@ -321,10 +321,14 @@ sub create_lineitem_list_assets {
 
 sub test_vandelay_import_args {
     my $vandelay = shift;
+    my $q_needed = shift;
 
-    # we need a queue
-    return 0 unless $vandelay and 
-        ($vandelay->{queue_name} or $vandelay->{existing_queue});
+    # we need valid args and (sometimes) a queue
+    return 0 unless $vandelay and (
+        !$q_needed or
+        $vandelay->{queue_name} or 
+        $vandelay->{existing_queue}
+    );
 
     # match-based merge/overlay import
     return 2 if $vandelay->{merge_profile} and (
@@ -392,18 +396,44 @@ sub import_li_bibs_via_vandelay {
         return {li_ids => $li_ids};
     }
 
+    # see if we have any records that are not yet linked to VL records (i.e. 
+    # not in a queue).  This will tell us if lack of a queue name is an error.
+    my $non_queued = $e->search_acq_lineitem(
+        {id => $needs_importing, queued_record => undef},
+        {idlist => 1}
+    );
+
     # add the already-imported records to the response list
     push(@{$res->{li_ids}}, grep { $_ != @$needs_importing } @$li_ids);
 
     $logger->info("acq-vl: processing recs via Vandelay with args: ".Dumper($vandelay));
 
-    my $vl_stat = test_vandelay_import_args($vandelay);
+    my $vl_stat = test_vandelay_import_args($vandelay, scalar(@$non_queued));
     if ($vl_stat == 0) {
         $logger->error("acq-vl: invalid vandelay arguments for acq import (queue needed)");
         return $res;
     }
 
-    my $queue = find_or_create_vandelay_queue($e, $vandelay) or return $res;
+    my $queue;
+    if (@$non_queued) {
+        # when any non-queued lineitems exist, their vandelay counterparts 
+        # require a place to live.
+        $queue = find_or_create_vandelay_queue($e, $vandelay) or return $res;
+
+    } else {
+        # if all lineitems are already queued, the queue reported to the user
+        # is purely for information / convenience.  pick a random queue.
+        $queue = $e->retrieve_acq_lineitem([
+            $needs_importing->[0], {   
+                flesh => 2, 
+                flesh_fields => {
+                    jub => ['queued_record'], 
+                    vqbr => ['queue']
+                }
+            }
+        ])->queued_record->queue;
+    }
+
     $mgr->{args}->{queue} = $queue;
 
     # load the lineitems into the queue for merge processing
@@ -413,18 +443,28 @@ sub import_li_bibs_via_vandelay {
 
         my $li = $e->retrieve_acq_lineitem($li_id) or return $res;
 
-        my $vqbr = Fieldmapper::vandelay::queued_bib_record->new;
-        $vqbr->marc($li->marc);
-        $vqbr->queue($queue->id);
-        $vqbr->bib_source($vandelay->{bib_source} || undef); # avoid ''
-        $vqbr = $e->create_vandelay_queued_bib_record($vqbr) or return $res;
-        push(@vqbr_ids, $vqbr->id);
+        if ($li->queued_record) {
+            $logger->info("acq-vl: $li_id already linked to a vandelay record");
+            push(@vqbr_ids, $li->queued_record);
+
+        } else {
+            $logger->info("acq-vl: creating new vandelay record for lineitem $li_id");
+
+            # create a new VL queued record and link it up
+            my $vqbr = Fieldmapper::vandelay::queued_bib_record->new;
+            $vqbr->marc($li->marc);
+            $vqbr->queue($queue->id);
+            $vqbr->bib_source($vandelay->{bib_source} || undef); # avoid ''
+            $vqbr = $e->create_vandelay_queued_bib_record($vqbr) or return $res;
+            push(@vqbr_ids, $vqbr->id);
+
+            # tell the acq record which vandelay record it's linked to
+            $li->queued_record($vqbr->id);
+            $e->update_acq_lineitem($li) or return $res;
+        }
+
         $mgr->add_vqbr;
         $mgr->respond;
-
-        # tell the acq record which vandelay record it's linked to
-        $li->queued_record($vqbr->id);
-        $e->update_acq_lineitem($li) or return $res;
         push(@lis, $li);
     }
 
@@ -673,7 +713,8 @@ sub receive_lineitem_detail {
 
     if ($lid->eg_copy_id) {
         my $copy = $e->retrieve_asset_copy($lid->eg_copy_id) or return 0;
-        $copy->status(OILS_COPY_STATUS_IN_PROCESS);
+        # only update status if it hasn't already been updated
+        $copy->status(OILS_COPY_STATUS_IN_PROCESS) if $copy->status == OILS_COPY_STATUS_ON_ORDER;
         $copy->edit_date('now');
         $copy->editor($e->requestor->id);
         $copy->creator($e->requestor->id) if $U->ou_ancestor_setting_value(
@@ -1331,6 +1372,17 @@ sub upload_records {
     my $activate_po     = $args->{activate_po};
     my $vandelay        = $args->{vandelay};
     my $ordering_agency = $args->{ordering_agency} || $e->requestor->ws_ou;
+    my $fiscal_year     = $args->{fiscal_year};
+
+    # if the user provides no fiscal year, find the
+    # current fiscal year for the ordering agency.
+    $fiscal_year ||= $U->simplereq(
+        'open-ils.acq',
+        'open-ils.acq.org_unit.current_fiscal_year',
+        $auth,
+        $ordering_agency
+    );
+
     my $po;
     my $evt;
 
@@ -1410,7 +1462,8 @@ sub upload_records {
         $mgr->respond;
         $li->provider($provider); # flesh it, we'll need it later
 
-        import_lineitem_details($mgr, $ordering_agency, $li) or return $mgr->editor->die_event;
+        import_lineitem_details($mgr, $ordering_agency, $li, $fiscal_year) 
+            or return $mgr->editor->die_event;
         $mgr->respond;
 
         push(@li_list, $li->id);
@@ -1478,7 +1531,7 @@ sub extract_po_name {
 }
 
 sub import_lineitem_details {
-    my($mgr, $ordering_agency, $li) = @_;
+    my($mgr, $ordering_agency, $li, $fiscal_year) = @_;
 
     my $holdings = $mgr->editor->json_query({from => ['acq.extract_provider_holding_data', $li->id]});
     return 1 unless @$holdings;
@@ -1491,7 +1544,7 @@ sub import_lineitem_details {
     while(1) {
         # create a lineitem detail for each copy in the data
 
-        my $compiled = extract_lineitem_detail_data($mgr, $org_path, $holdings, $idx);
+        my $compiled = extract_lineitem_detail_data($mgr, $org_path, $holdings, $idx, $fiscal_year);
         last unless defined $compiled;
         return 0 unless $compiled;
 
@@ -1527,7 +1580,7 @@ sub import_lineitem_details {
 
 # return hash on success, 0 on error, undef on no more holdings
 sub extract_lineitem_detail_data {
-    my($mgr, $org_path, $holdings, $index) = @_;
+    my($mgr, $org_path, $holdings, $index, $fiscal_year) = @_;
 
     my @data_list = grep { $_->{holding} eq $index } @$holdings;
     return undef unless @data_list;
@@ -1553,7 +1606,7 @@ sub extract_lineitem_detail_data {
             # search up the org tree for the most appropriate fund
             for my $org (@$org_path) {
                 $fund = $mgr->editor->search_acq_fund(
-                    {org => $org, code => $code, year => DateTime->now->year}, {idlist => 1})->[0];
+                    {org => $org, code => $code, year => $fiscal_year}, {idlist => 1})->[0];
                 last if $fund;
             }
         }
@@ -3425,6 +3478,7 @@ sub add_li_to_po {
         return {success => 0, li => $li, error => 'bad-li-state'};
     }
 
+    $li->provider($po->provider);
     $li->purchase_order($po_id);
     $li->state('pending-order');
     update_lineitem($mgr, $li) or return $e->die_event;

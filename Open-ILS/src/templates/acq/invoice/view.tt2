@@ -34,6 +34,7 @@
     <div dojoType="dijit.layout.ContentPane" layoutAlign="client">
         <div id='acq-invoice-summary'>
             <button id='acq-invoice-summary-toggle-off'>[% l('Hide Details') %]</button>
+            <span class="hidden" id="ident-validation-spinner"><img src="[% ctx.media_prefix %]/opac/images/progressbar_green.gif" style="height: 16px; width: 16px" /></span>
             <div id='acq-view-invoice-div'></div>
         </div>
         <div id='acq-invoice-summary-small'>
@@ -44,11 +45,13 @@
         </div>
     </div>
 
+    <!--
     <div dojoType="dijit.layout.ContentPane" layoutAlign="client">
+    -->
 
-        <div dojoType="dijit.layout.TabContainer" style="width: 96%; height: 100%;">
+        <div dojoType="dijit.layout.TabContainer" style="width: 96%; height: 100%;" doLayout='false'>
             <div dojoType="dijit.layout.ContentPane" 
-                class='oils-acq-detail-content-pane' title="Invoice" selected='true' style='height:600px'>
+                class='oils-acq-detail-content-pane' title="Invoice" selected='true'>
 
                 <script type='dojo/connect' event='onShow'>
                     // the table is left at display=none on subsequent tab views
@@ -261,6 +264,9 @@
                             </td>
                         </tr></table>
                     </div> <!-- end search form -->
+                    <div style='border-bottom:1px solid #888;'>
+                        <input type='checkbox' onclick='selectSearchResults()'>&nbsp;[% l('Select All') %]</input>
+                    </div>
                     <div id='acq-unified-results-no_results'>
                         <b>[% l('No Results') %]</b>
                     </div>
@@ -299,7 +305,7 @@
                 </div>
             </div> <!-- tab 2 -->
         </div> <!-- end tabcontainer -->
-    </div> <!-- end contentpane -->
+    <!--</div>--> <!-- end contentpane -->
 </div>
 <div dojoType='openils.widget.ProgressDialog' jsId='progressDialog'></div>
 <div jsId='extraItemsDialog' dojoType="dijit.Dialog" title="Extra Items">
@@ -321,6 +327,5 @@
 </script>
 <script type="text/javascript" src="[% ctx.media_prefix %]/js/ui/default/acq/common/base64.js"></script>
 <script type="text/javascript" src="[% ctx.media_prefix %]/js/ui/default/acq/search/unified.js"></script>
-<script type="text/javascript" src='[% ctx.media_prefix %]/js/ui/default/acq/invoice/common.js'> </script>
 <script type="text/javascript" src='[% ctx.media_prefix %]/js/ui/default/acq/invoice/view.js'> </script>
 [% END %]

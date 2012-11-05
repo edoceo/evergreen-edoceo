@@ -310,7 +310,7 @@ function my_init() {
                 { label : $('catStrings').getString('staff.cat.marcedit.replace_006.label'),
                   oncommand : 
                     'var e = document.createEvent("KeyEvents");' +
-                    'e.initKeyEvent("keypress",1,1,null,1,0,0,0,64,0);' +
+                    'e.initKeyEvent("keypress",1,1,null,1,0,0,0,117,0);' +
                     'current_focus.inputField.dispatchEvent(e);'
                  }
             )
@@ -321,7 +321,7 @@ function my_init() {
                 { label : $('catStrings').getString('staff.cat.marcedit.replace_007.label'),
                   oncommand : 
                     'var e = document.createEvent("KeyEvents");' +
-                    'e.initKeyEvent("keypress",1,1,null,1,0,0,0,65,0);' +
+                    'e.initKeyEvent("keypress",1,1,null,1,0,0,0,118,0);' +
                     'current_focus.inputField.dispatchEvent(e);'
                 }
             )
@@ -332,7 +332,7 @@ function my_init() {
                 { label : $('catStrings').getString('staff.cat.marcedit.replace_008.label'),
                   oncommand : 
                     'var e = document.createEvent("KeyEvents");' +
-                    'e.initKeyEvent("keypress",1,1,null,1,0,0,0,66,0);' +
+                    'e.initKeyEvent("keypress",1,1,null,1,0,0,0,119,0);' +
                     'current_focus.inputField.dispatchEvent(e);'
                 }
             )
@@ -472,7 +472,7 @@ function setFocusToNextTag (row, direction) {
     var keep_looking = true;
     while (keep_looking && (direction == 'up' ? row = row.previousSibling : row = row.nextSibling)) {
         // Is it a datafield?
-        dojo.query('hbox hbox textbox', row).forEach(function(node, index, arr) {
+        dojo.query('hbox', row).query('hbox').query('textbox').forEach(function(node, index, arr) {
             node.focus();
             keep_looking = false;
         });
@@ -684,13 +684,13 @@ function createMARCTextbox (element,attrs) {
                     event.preventDefault();
                     return false;
                 }
-            } else if (event.keyCode == 64 && event.ctrlKey) { // ctrl + F6
+            } else if (event.keyCode == 117 && event.ctrlKey) { // ctrl + F6
                 createControlField('006','                                        ');
                 loadRecord();
-            } else if (event.keyCode == 65 && event.ctrlKey) { // ctrl + F7
+            } else if (event.keyCode == 118 && event.ctrlKey) { // ctrl + F7
                 createControlField('007','                                        ');
                 loadRecord();
-            } else if (event.keyCode == 66 && event.ctrlKey) { // ctrl + F8
+            } else if (event.keyCode == 119 && event.ctrlKey) { // ctrl + F8
                 createControlField('008','                                        ');
                 loadRecord();
             }
@@ -777,7 +777,7 @@ function changeFFEditor (type) {
     // Hide FFEditor rows that we don't need for our current type
     // If all of the labels for a given row do not include our
     // desired type in their set attribute, we can hide that row
-    dojo.query('rows row', grid).forEach(function(node, index, arr) {
+    dojo.query('rows', grid).query('row').forEach(function(node, index, arr) {
         if (dojo.query('label[set~=' + type + ']', node).length == 0) {
             node.hidden = true;
         }
@@ -1767,7 +1767,7 @@ function browseAuthority (sf_popup, menu_id, target, sf, limit, page) {
             var main_text = '';
             var see_from = [];
             var see_also = [];
-            var auth_id = dojox.xml.parser.textContent(dojo.query('datafield[tag="901"] subfield[code="c"]', record)[0]);
+            var auth_id = dojox.xml.parser.textContent(dojo.query('datafield[tag="901"]', record).query('subfield[code="c"]')[0]);
             var auth_org = dojox.xml.parser.textContent(dojo.query('controlfield[tag="003"]', record)[0]);
 
             // Grab the fields with tags beginning with 1 (main entries) and iterate through the subfields
@@ -1853,7 +1853,13 @@ function buildAuthorityPopup (entry_text, record, auth_org, auth_id, sf_popup, t
     }
     submenu.appendChild(popup);
 
-    dojo.query('datafield[tag^="1"], datafield[tag^="4"], datafield[tag^="5"]', record).forEach(function(field) {
+    dojo.query('datafield[tag^="1"]', record).forEach(function(field) {
+        buildAuthorityPopupSelector(field, grid, auth_org, auth_id);
+    });
+    dojo.query('datafield[tag^="4"]', record).forEach(function(field) {
+        buildAuthorityPopupSelector(field, grid, auth_org, auth_id);
+    });
+    dojo.query('datafield[tag^="5"]', record).forEach(function(field) {
         buildAuthorityPopupSelector(field, grid, auth_org, auth_id);
     });
 

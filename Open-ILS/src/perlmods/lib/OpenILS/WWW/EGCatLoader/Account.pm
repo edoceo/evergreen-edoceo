@@ -454,15 +454,16 @@ sub fetch_user_holds {
         $hold_ids = $circ->request(
             'open-ils.circ.holds.id_list.retrieve.authoritative', 
             $e->authtoken, 
-            $e->requestor->id
+            $e->requestor->id,
+            $available
         )->gather(1);
         $circ->kill_me;
-    
-        $hold_ids = [ grep { defined $_ } @$hold_ids[$offset..($offset + $limit - 1)] ] if $limit or $offset;
     }
 
+    my $all_ids = $hold_ids;
+    $hold_ids = [ grep { defined $_ } @$hold_ids[$offset..($offset + $limit - 1)] ] if $limit or $offset;
 
-    return $hold_ids if $ids_only or @$hold_ids == 0;
+    return { ids => $hold_ids, all_ids => $all_ids } if $ids_only or @$hold_ids == 0;
 
     my $args = {
         suppress_notices => 1,
@@ -499,10 +500,6 @@ sub fetch_user_holds {
         last if $first and not @ses;
 
         if(@collected) {
-            # If desired by the caller, filter any holds that are not available.
-            if ($available) {
-                @collected = grep { $_->{hold}->{status} == 4 } @collected;
-            }
             while(my $blob = pop(@collected)) {
                 my (undef, @data) = $self->get_records_and_facets(
                     [$blob->{hold}->{bre_id}], undef, {flesh => '{mra}'}
@@ -528,7 +525,7 @@ sub fetch_user_holds {
         push @sorted, grep { $_->{hold}->{hold}->id == $id } @holds;
     }
 
-    return \@sorted;
+    return { holds => \@sorted, ids => $hold_ids, all_ids => $all_ids };
 }
 
 sub handle_hold_update {
@@ -539,7 +536,7 @@ sub handle_hold_update {
     my $url;
 
     my @hold_ids = ($hold_ids) ? @$hold_ids : $self->cgi->param('hold_id'); # for non-_all actions
-    @hold_ids = @{$self->fetch_user_holds(undef, 1)} if $action =~ /_all/;
+    @hold_ids = @{$self->fetch_user_holds(undef, 1)->{ids}} if $action =~ /_all/;
 
     my $circ = OpenSRF::AppSession->create('open-ils.circ');
 
@@ -592,7 +589,7 @@ sub handle_hold_update {
             'open-ils.circ.hold.update.batch.atomic',
             $e->authtoken, undef, \@vals
         )->gather(1);   # LFW XXX test for failure
-        $url = 'https://' . $self->apache->hostname . $self->ctx->{opac_root} . '/myopac/holds';
+        $url = $self->ctx->{proto} . '://' . $self->ctx->{hostname} . $self->ctx->{opac_root} . '/myopac/holds';
         foreach my $param (('loc', 'qtype', 'query')) {
             if ($self->cgi->param($param)) {
                 $url .= ";$param=" . uri_escape($self->cgi->param($param));
@@ -609,7 +606,7 @@ sub load_myopac_holds {
     my $e = $self->editor;
     my $ctx = $self->ctx;
     
-    my $limit = $self->cgi->param('limit') || 0;
+    my $limit = $self->cgi->param('limit') || 15;
     my $offset = $self->cgi->param('offset') || 0;
     my $action = $self->cgi->param('action') || '';
     my $hold_id = $self->cgi->param('id');
@@ -618,7 +615,13 @@ sub load_myopac_holds {
     my $hold_handle_result;
     $hold_handle_result = $self->handle_hold_update($action) if $action;
 
-    $ctx->{holds} = $self->fetch_user_holds($hold_id ? [$hold_id] : undef, 0, 1, $available, $limit, $offset);
+    my $holds_object = $self->fetch_user_holds($hold_id ? [$hold_id] : undef, 0, 1, $available, $limit, $offset);
+    if($holds_object->{holds}) {
+        $ctx->{holds} = $holds_object->{holds};
+    }
+    $ctx->{holds_ids} = $holds_object->{all_ids};
+    $ctx->{holds_limit} = $limit;
+    $ctx->{holds_offset} = $offset;
 
     return defined($hold_handle_result) ? $hold_handle_result : Apache2::Const::OK;
 }
@@ -1173,12 +1176,15 @@ sub load_myopac_hold_history {
             }]
         },
         from => 'au',
-        where => {id => $e->requestor->id}, 
-        limit => $limit,
-        offset => $offset
+        where => {id => $e->requestor->id}
     });
 
-    $ctx->{holds} = $self->fetch_user_holds([map { $_->{id} } @$hold_ids], 0, 1, 0);
+    my $holds_object = $self->fetch_user_holds([map { $_->{id} } @$hold_ids], 0, 1, 0, $limit, $offset);
+    if($holds_object->{holds}) {
+        $ctx->{holds} = $holds_object->{holds};
+    }
+    $ctx->{hold_history_ids} = $holds_object->{all_ids};
+
     return Apache2::Const::OK;
 }
 
@@ -1740,6 +1746,11 @@ sub load_myopac_bookbags {
                 }
             }
 
+            # we're done with our CStoreEditor.  Rollback here so 
+            # later calls don't cause a timeout, resulting in a 
+            # transaction rollback under the covers.
+            $e->rollback;
+
             my $query = $self->_prepare_bookbag_container_query(
                 $bookbag->id, $sorter, $modifier
             );
@@ -1753,6 +1764,7 @@ sub load_myopac_bookbags {
 
             my $items = $U->bib_container_items_via_search($bookbag->id, $query, $args)
                 or return Apache2::Const::HTTP_INTERNAL_SERVER_ERROR;
+
 
             my (undef, @recs) = $self->get_records_and_facets(
                 [ map {$_->target_biblio_record_entry->id} @$items ],
@@ -1770,13 +1782,19 @@ sub load_myopac_bookbags {
     # or "See all" popmenu items.
     if (my $add_rec = $self->cgi->param('add_rec')) {
         $self->ctx->{add_rec} = $add_rec;
-        $self->ctx->{where_from} = $self->ctx->{referer};
-        if ( my $anchor = $self->cgi->param('anchor') ) {
-            $self->ctx->{where_from} =~ s/#.*|$/#$anchor/;
+        # But not in the staff client, 'cause that breaks things.
+        unless ($self->ctx->{is_staff}) {
+            $self->ctx->{where_from} = $self->ctx->{referer};
+            if ( my $anchor = $self->cgi->param('anchor') ) {
+                $self->ctx->{where_from} =~ s/#.*|$/#$anchor/;
+            }
         }
     }
 
+    # this rollback may be a dupe, but that's OK because 
+    # cstoreditor ignores dupe rollbacks
     $e->rollback;
+
     return Apache2::Const::OK;
 }
 
@@ -1806,7 +1824,7 @@ sub load_myopac_bookbag_update {
     # This url intentionally leaves off the edit_notes parameter, but
     # may need to add some back in for paging.
 
-    my $url = "https://" . $self->apache->hostname .
+    my $url = $self->ctx->{proto} . "://" . $self->ctx->{hostname} .
         $self->ctx->{opac_root} . "/myopac/lists?";
 
     foreach my $param (('loc', 'qtype', 'query', 'sort')) {
@@ -1915,7 +1933,7 @@ sub load_myopac_bookbag_update {
             last unless $success;
         }
         # Redirect back where we came from if we have an anchor parameter:
-        if ( my $anchor = $cgi->param('anchor') ) {
+        if ( my $anchor = $cgi->param('anchor') && !$self->ctx->{is_staff}) {
             $url = $self->ctx->{referer};
             $url =~ s/#.*|$/#$anchor/;
         } elsif ($cgi->param('where_from')) {

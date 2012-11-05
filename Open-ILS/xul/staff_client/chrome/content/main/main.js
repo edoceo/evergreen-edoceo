@@ -376,6 +376,24 @@ function main_init() {
             var url = G.auth.controller.view.server_prompt.value.match(/^[^\/]*/).toString() || urls.remote;
 
             G.data.server_unadorned = url; G.data.stash('server_unadorned'); G.data.stash_retrieve();
+            try {
+                G.data.search_lib = G.pref.getIntPref('open-ils.' + url + '.search_lib');
+            } catch(E) {
+                G.data.search_lib = null;
+            }
+            try {
+                G.data.pref_lib = G.pref.getIntPref('open-ils.' + url + '.pref_lib');
+            } catch(E) {
+                G.data.pref_lib = null;
+            }
+            try {
+                G.data.adv_pane = G.pref.getCharPref('open-ils.' + url + '.adv_pane');
+            } catch(E) {
+                G.data.adv_pane = null;
+            }
+            G.data.stash('search_lib');
+            G.data.stash('pref_lib');
+            G.data.stash('adv_pane');
 
             if (! url.match( '^(http|https)://' ) ) { url = 'http://' + url; }
 
@@ -706,12 +724,19 @@ function main_init() {
             document.getElementById('offline_import_btn').disabled = true;
         }
 
+        var should_test_server = true;
         // Attempt auto-login, if provided
         if("arguments" in window && window.arguments.length > 0 && window.arguments[0].wrappedJSObject != undefined && window.arguments[0].wrappedJSObject.loginInfo != undefined) {
-            auto_login(window.arguments[0].wrappedJSObject.loginInfo);
+            should_test_server = auto_login(window.arguments[0].wrappedJSObject.loginInfo);
             // Regardless of success, clear that variable now, so we don't possibly have passwords hanging around.
             window.arguments[0].wrappedJSObject.loginInfo = null;
         }
+
+        if (should_test_server) {
+            G.auth.test_server(G.auth.controller.view.server_prompt.value);
+            G.auth.controller.render('ws_deck');
+        }
+        setTimeout(load_init_hostname, 500);
 
     } catch(E) {
         var error = offlineStrings.getFormattedString('common.exception', [E, '']);
@@ -719,6 +744,18 @@ function main_init() {
         alert(error);
     }
     dump('exiting main_init()\n');
+}
+
+function load_init_hostname() {
+    G.data.stash_retrieve();
+    if(!G.auth.controller.view.server_prompt.value) {
+        try {
+            G.auth.controller.view.server_prompt.value = G.pref.getCharPref('open-ils.initial_hostname');
+            G.auth.test_server(G.pref.getCharPref('open-ils.initial_hostname'));
+            G.auth.controller.render('ws_deck');
+        } catch(E) {
+        }
+    }
 }
 
 function found_ws_info_in_Achrome() {
@@ -766,13 +803,21 @@ function handle_migration() {
 
 function auto_login(loginInfo) {
     G.data.stash_retrieve();
+    var should_test_server = true;
     if(G.data.session) return; // We are logged in. No auto-logoff supported.
-    if(loginInfo.host) G.auth.controller.view.server_prompt.value = loginInfo.host;
+    if(loginInfo.host) {
+        G.auth.controller.view.server_prompt.value = loginInfo.host;
+        G.auth.test_server(loginInfo.host);
+        G.auth.controller.render('ws_deck');
+        should_test_server = false;
+    }
     if(loginInfo.user) G.auth.controller.view.name_prompt.value = loginInfo.user;
     if(loginInfo.passwd) G.auth.controller.view.password_prompt.value = loginInfo.passwd;
     if(loginInfo.host && loginInfo.user && loginInfo.passwd && G.data.ws_info && G.data.ws_info[loginInfo.host]) {
-        G.auth.login();
+        // Give test_server time to finish
+        setTimeout(function() { G.auth.login(); }, 1000);
     }
+    return should_test_server;
 }
 
 dump('exiting main/main.js\n');

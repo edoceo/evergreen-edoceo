@@ -1,6 +1,7 @@
 [% WRAPPER 'base.tt2' %]
 [% ctx.page_title = "Purchase Order" %]
 <div dojoType="dijit.layout.ContentPane" style="height:100%">
+    <div id='oils-scroll-to-top'></div>
     <div>
         <div id='oils-acq-picklist-header'>
             <big>
@@ -106,9 +107,6 @@
                 </tr>
                 <tr>
                     <th></th>
-                    <td></td>
-                    <th>[% l('Allow activation with <br/> zero-copy lineitems') %]</th>
-                    <td><input type='checkbox' id='acq-po-activate-zero-copies' onclick='checkCouldActivatePo()'/></td>
                     <td>
                         <div class='hidden' id='acq-po-return-to-search'>
                             <button dojoType='dijit.form.Button' id='acq-po-return-to-search-button'>[% l('&#x2196; Return to Search') %]</button>
@@ -117,7 +115,8 @@
                             <button dojoType='dijit.form.Button' id='acq-po-return-to-invoice-button'>[% l('&#x2196; Return to Invoice') %]</button>
                         </div>
                     </td>
-                    <td/>
+                    <th>[% l('Allow activation with <br/> zero-copy lineitems') %]</th>
+                    <td><input type='checkbox' id='acq-po-activate-zero-copies' onclick='checkCouldActivatePo()'/></td>
                 </tr>
                 <tr>
                     <td colspan='3'>
