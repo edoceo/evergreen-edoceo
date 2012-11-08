@@ -119,7 +119,7 @@
                 <!-- Edoceo Stuff -->
                 <!-- uses existing lable from lang.dtd -->
                 <row>
-                    <label id="PatronSummaryContact_guardian" onclick="alert(beer);" value="&staff.patron.ue.parent_guardian.label;" />
+                    <label id="PatronSummaryContact_guardian" value="&staff.patron_display.parent_guardian.label;" />
                     <description id="patron_parent_guardian" class="" />
                 </row>
                 <row>
