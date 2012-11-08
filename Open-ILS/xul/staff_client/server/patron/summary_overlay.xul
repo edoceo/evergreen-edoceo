@@ -139,7 +139,7 @@
     <rows id="pdsgr" flex="1">
         <row id="pdsgr0">
             <label id="PatronSummaryContact_library_card_label" class="copyable text_left card label"
-                value="&ack ;"/>
+                value="&staff.patron_display.library_card.label;"/>
             <description id="patron_card" class="copyable card value click_link" onclick="try { copy_to_clipboard(event); } catch(E) { alert(E); }"/>
         </row>
         <!-- Edoceo Stuff -->
