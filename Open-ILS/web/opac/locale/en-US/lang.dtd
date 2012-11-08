@@ -1505,6 +1505,7 @@
 <!ENTITY staff.patron_display.items.print_receipt.accesskey 'P'>
 <!ENTITY staff.patron_display.items_claimed_returned.label 'Items Claimed Returned:'>
 <!ENTITY staff.patron_display.library_card.label 'Library Card:'>
+<!ENTITY staff.patron_display.parent_guardian.label 'Parent/Guardian:'>
 <!ENTITY staff.patron_display.verify_password.label 'Test Password'>
 <!ENTITY staff.patron_display.verify_password.accesskey 'P'>
 <!ENTITY staff.patron_display.toggle_summary.label 'Toggle Summary'>
@@ -3371,7 +3372,6 @@
 <!-- Used in a selection list, the '-' at the start and end draws attention to the entry -->
 <!ENTITY staff.patron.ue.none_selected.label " -- None Selected -- ">
 <!ENTITY staff.patron.ue.secondary_id.label "Secondary Identification">
-<!ENTITY staff.patron.ue.parent_guardian.label "Parent or Guardian">
 <!ENTITY staff.patron.ue.email_address.label "Email Address">
 <!ENTITY staff.patron.ue.day_phone.label "Daytime Phone">
 <!ENTITY staff.patron.ue.evening_phone.label "Evening Phone">
