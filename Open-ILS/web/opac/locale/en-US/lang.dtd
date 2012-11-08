@@ -3372,6 +3372,7 @@
 <!-- Used in a selection list, the '-' at the start and end draws attention to the entry -->
 <!ENTITY staff.patron.ue.none_selected.label " -- None Selected -- ">
 <!ENTITY staff.patron.ue.secondary_id.label "Secondary Identification">
+<!ENTITY staff.patron.ue.parent_guardian.label "Parent or Guardian">
 <!ENTITY staff.patron.ue.email_address.label "Email Address">
 <!ENTITY staff.patron.ue.day_phone.label "Daytime Phone">
 <!ENTITY staff.patron.ue.evening_phone.label "Evening Phone">
