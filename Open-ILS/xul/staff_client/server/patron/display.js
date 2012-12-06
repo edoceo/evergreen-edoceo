@@ -981,9 +981,24 @@ patron.display.prototype = {
                     expire.setFullYear(expire_parts[0], expire_parts[1], expire_parts[2]);
                     expire = expire.getTime()/1000
 
+                    var preexpire = new Date();
+                    var preexpire_value;
+                    var preexpire_setting = obj.OpenILS.data.hash.aous['circ.patron_expires_soon_warning'];
+                    if (preexpire_setting) {
+                        if (typeof preexpire_setting == "string") { 
+                            preexpire_value = parseInt(preexpire_setting);  
+                        } else {
+                            preexpire_value = preexpire_setting;
+                        }
+                        preexpire.setDate(preexpire.getDate() + preexpire_value);
+                    }
+                    preexpire = preexpire.getTime()/1000;
+
                     if (expire < now) {
                         msg += $("patronStrings").getString('staff.patron.display.init.network_request.account_expired');
-                    obj.stop_checkouts = true;
+                        obj.stop_checkouts = true;
+                    } else if (expire < preexpire && preexpire_setting) {
+                        msg += $("patronStrings").getString('staff.patron.display.init.network_request.account_expire_soon');
                     }
                 }
                 var penalties = patron.standing_penalties();

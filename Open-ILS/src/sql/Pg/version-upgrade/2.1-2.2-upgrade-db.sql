@@ -12418,6 +12418,15 @@ INSERT INTO permission.perm_list ( id, code, description )
         )
     );
 
+-- 0715.data.add_acq_config_group
+SELECT evergreen.upgrade_deps_block_check('0715', :eg_version);
+
+INSERT INTO config.settings_group (name, label) VALUES
+('acq', oils_i18n_gettext('config.settings_group.system', 'Acquisitions', 'coust', 'label'));
+
+UPDATE config.org_unit_setting_type
+    SET grp = 'acq'
+    WHERE name LIKE 'acq%';
 
 -- Evergreen DB patch 0716.coded_value_map_id_seq_fix.sql
 
@@ -16198,3 +16207,22 @@ CREATE INDEX ii_poi_idx on acq.invoice_item (po_item);
 
 DROP LANGUAGE plperl;
 
+\qecho Evergreen depends heavily on each bibliographic record containing
+\qecho a 901 field with a subfield "c" to hold the record ID. The following
+\qecho query identifies the bibs that are missing 901s or whose first
+\qecho 901$c is not equal to the bib ID. This *will* take a long time in a
+\qecho big database; as the schema updates are over now, you can cancel this
+\qecho if you are in a rush.
+
+SELECT id
+  FROM biblio.record_entry
+  WHERE (
+    (XPATH('//marc:datafield[@tag="901"][1]/marc:subfield[@code="c"]/text()', marc::XML, ARRAY[ARRAY['marc', 'http://www.loc.gov/MARC21/slim']]))[1]::TEXT IS NULL
+  OR
+    (XPATH('//marc:datafield[@tag="901"][1]/marc:subfield[@code="c"]/text()', marc::XML, ARRAY[ARRAY['marc', 'http://www.loc.gov/MARC21/slim']]))[1]::TEXT <> id::TEXT)
+  AND id > -1;
+
+\qecho If there are records with missing or incorrect 901$c values, you can
+\qecho generally rely on the triggers in the biblio.record_entry table to
+\qecho populate the 901$c properly; for each offending record, run:
+\qecho   UPDATE biblio.record_entry SET marc = marc WHERE id = <id>;
